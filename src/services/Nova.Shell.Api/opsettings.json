@@ -1,0 +1,26 @@
+{
+  "HealthChecks": {
+    "DisableMsSql": false,
+    "DisablePostgres": true,
+    "DisableMariaDb": true
+  },
+  "Logging": {
+    "DefaultLevel": "Information",
+    "EnableRequestResponseLogging": false,
+    "EnableDiagnosticLogging": false,
+    "Windows": [
+      { "Name": "PeakMorning",     "Start": "07:00", "End": "10:00", "Level": "Warning" },
+      { "Name": "DiagnosticNight", "Start": "22:00", "End": "02:00", "Level": "Debug"   }
+    ]
+  },
+  "Caching": {
+    "GloballyEnabled": true,
+    "EmergencyDisable": false,
+    "DryRunMode": false,
+    "Profiles": {
+      "ReferenceData":   { "Layer": "Redis",  "TtlSeconds": 3600, "Enabled": true  },
+      "TransactionData": { "Layer": "None",   "TtlSeconds": 0,    "Enabled": false }
+    },
+    "EndpointExclusions": []
+  }
+}

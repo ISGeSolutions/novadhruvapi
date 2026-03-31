@@ -1,0 +1,264 @@
+{
+  "info": {
+    "name": "Nova.Shell.Api",
+    "description": "Diagnostic and health check endpoints for Nova.Shell.Api",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Diagnostics",
+      "item": [
+        {
+          "name": "Hello World",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/hello-world",
+              "host": ["{{baseUrl}}"],
+              "path": ["hello-world"]
+            },
+            "description": "Returns a hello world message with timestamp and correlation ID. No authentication required."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/hello-world",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["hello-world"]
+                }
+              },
+              "body": "{\n  \"message\": \"Hello, World!\",\n  \"timestamp\": \"2026-03-13T10:00:00Z\",\n  \"correlationId\": \"abc-123\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Test DB — MSSQL",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/test-db/mssql",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-db", "mssql"]
+            },
+            "description": "Executes SELECT code, value FROM sales97.dbo.pointer against the diagnostic MSSQL connection. No authentication required. Returns 503 on connection failure."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/test-db/mssql",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-db", "mssql"]
+                }
+              },
+              "body": "[\n  { \"code\": \"ABC\", \"value\": \"Something\" }\n]"
+            },
+            {
+              "name": "503 Service Unavailable",
+              "status": "Service Unavailable",
+              "code": 503,
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/test-db/mssql",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-db", "mssql"]
+                }
+              },
+              "body": "{\n  \"error\": \"A network-related error occurred\",\n  \"db\": \"mssql\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Test DB — Postgres",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/test-db/postgres",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-db", "postgres"]
+            },
+            "description": "Executes SELECT code, value FROM sales97.pointer against the diagnostic Postgres connection. No authentication required. Returns 503 on connection failure."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/test-db/postgres",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-db", "postgres"]
+                }
+              },
+              "body": "[\n  { \"code\": \"ABC\", \"value\": \"Something\" }\n]"
+            },
+            {
+              "name": "503 Service Unavailable",
+              "status": "Service Unavailable",
+              "code": 503,
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/test-db/postgres",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-db", "postgres"]
+                }
+              },
+              "body": "{\n  \"error\": \"Connection refused\",\n  \"db\": \"postgres\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Health Checks",
+      "item": [
+        {
+          "name": "Health — Aggregate",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Aggregate health check combining MSSQL and Postgres checks."
+          },
+          "response": [
+            {
+              "name": "200 Healthy",
+              "status": "OK",
+              "code": 200,
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/health",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["health"]
+                }
+              },
+              "body": "{\"status\":\"Healthy\"}"
+            },
+            {
+              "name": "503 Unhealthy",
+              "status": "Service Unavailable",
+              "code": 503,
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/health",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["health"]
+                }
+              },
+              "body": "{\"status\":\"Unhealthy\"}"
+            }
+          ]
+        },
+        {
+          "name": "Health — MSSQL",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health/mssql",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "mssql"]
+            },
+            "description": "Health check for the diagnostic MSSQL connection. Executes SELECT 1."
+          },
+          "response": [
+            {
+              "name": "200 Healthy",
+              "status": "OK",
+              "code": 200,
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/health/mssql",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["health", "mssql"]
+                }
+              },
+              "body": "{\"status\":\"Healthy\"}"
+            },
+            {
+              "name": "503 Unhealthy",
+              "status": "Service Unavailable",
+              "code": 503,
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/health/mssql",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["health", "mssql"]
+                }
+              },
+              "body": "{\"status\":\"Unhealthy\"}"
+            }
+          ]
+        },
+        {
+          "name": "Health — Postgres",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health/postgres",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "postgres"]
+            },
+            "description": "Health check for the diagnostic Postgres connection. Executes SELECT 1."
+          },
+          "response": [
+            {
+              "name": "200 Healthy",
+              "status": "OK",
+              "code": 200,
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/health/postgres",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["health", "postgres"]
+                }
+              },
+              "body": "{\"status\":\"Healthy\"}"
+            },
+            {
+              "name": "503 Unhealthy",
+              "status": "Service Unavailable",
+              "code": 503,
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/health/postgres",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["health", "postgres"]
+                }
+              },
+              "body": "{\"status\":\"Unhealthy\"}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

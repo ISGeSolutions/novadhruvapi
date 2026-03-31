@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Nova.Shell.Api (HTTP)",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/src/services/Nova.Shell.Api/Nova.Shell.Api.csproj",
+      "launchSettingsProfile": "Nova.Shell.Api (HTTP)"
+    },
+    {
+      "name": "Nova.Shell.Api (HTTPS)",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/src/services/Nova.Shell.Api/Nova.Shell.Api.csproj",
+      "launchSettingsProfile": "Nova.Shell.Api (HTTPS)"
+    },
+    {
+      "name": "Nova.Shell.Api (Console)",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/src/services/Nova.Shell.Api/Nova.Shell.Api.csproj",
+      "launchSettingsProfile": "Nova.Shell.Api (Console)"
+    }
+  ]
+}
