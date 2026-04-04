@@ -5,6 +5,7 @@
   </Folder>
   <Folder Name="/src/services/">
     <Project Path="src/services/Nova.Shell.Api/Nova.Shell.Api.csproj" />
+    <Project Path="src/services/Nova.ToDo.Api/Nova.ToDo.Api.csproj" />
   </Folder>
   <Folder Name="/src/shared/">
     <Project Path="src/shared/Nova.Shared.Web/Nova.Shared.Web.csproj" />

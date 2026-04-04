@@ -11,6 +11,16 @@ public interface ISqlDialect
     /// <summary>Returns a SQL OFFSET/FETCH or LIMIT/OFFSET pagination clause.</summary>
     string PaginationClause(int skip, int take);
 
+    /// <summary>
+    /// Returns only the offset/fetch fragment — no ORDER BY prefix.
+    /// Use this on queries that already carry an explicit ORDER BY clause.
+    /// <list type="bullet">
+    ///   <item>MSSQL:         <c>OFFSET {skip} ROWS FETCH NEXT {take} ROWS ONLY</c></item>
+    ///   <item>Postgres/MariaDB: <c>LIMIT {take} OFFSET {skip}</c></item>
+    /// </list>
+    /// </summary>
+    string OffsetFetchClause(int skip, int take);
+
     /// <summary>Returns the SQL clause used after INSERT to retrieve the generated id.</summary>
     string ReturningIdClause();
 

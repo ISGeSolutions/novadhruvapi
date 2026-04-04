@@ -12,6 +12,10 @@ public sealed class MsSqlDialect : ISqlDialect
         $"ORDER BY (SELECT NULL) OFFSET {skip} ROWS FETCH NEXT {take} ROWS ONLY";
 
     /// <inheritdoc />
+    public string OffsetFetchClause(int skip, int take) =>
+        $"OFFSET {skip} ROWS FETCH NEXT {take} ROWS ONLY";
+
+    /// <inheritdoc />
     public string ReturningIdClause() => "OUTPUT INSERTED.SeqNo";
 
     /// <inheritdoc />

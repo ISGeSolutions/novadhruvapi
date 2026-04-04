@@ -12,6 +12,10 @@ public sealed class PostgresDialect : ISqlDialect
         $"LIMIT {take} OFFSET {skip}";
 
     /// <inheritdoc />
+    public string OffsetFetchClause(int skip, int take) =>
+        $"LIMIT {take} OFFSET {skip}";
+
+    /// <inheritdoc />
     public string ReturningIdClause() => "RETURNING id;";
 
     /// <inheritdoc />
