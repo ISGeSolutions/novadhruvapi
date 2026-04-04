@@ -1,0 +1,1314 @@
+{
+  "info": {
+    "name": "Nova.Shell.Api",
+    "description": "Reference implementation for Nova platform API services.\n\nNova.Shell.Api demonstrates all platform conventions: project structure, middleware pipeline, JWT auth, tenant resolution, snake_case JSON, Problem Details error responses, input validation, health checks, Redis caching, distributed locking, service-to-service auth, DbUp migrations, and outbox relay.\n\nThis collection is the single source of truth \u2014 it serves two purposes:\n  1. API reference: run against a locally running Nova.Shell.Api (baseUrl = http://localhost:5100)\n  2. Mock server: import into Postman and create a Mock Server\n\n---\n\nAuthentication\n\n  Authenticated endpoints (POST /echo, POST /echo/list) need a JWT.\n  Use the Nova \u2014 Auth (Dev Token Generator) collection to generate access_token first,\n  then this collection will automatically attach it as a Bearer token.\n\n  Import: planning/postman/Nova.Auth.postman_collection.json\n\n---\n\nMock Server Workflow\n\n  1. Import this collection into Postman.\n  2. Right-click the collection \u2192 Mock Servers \u2192 Create Mock Server.\n  3. Copy the generated mock URL (e.g. https://abc123.mock.pstmn.io).\n  4. Update the baseUrl collection variable to the mock URL.\n  5. Send any request \u2014 Postman returns the first saved example by default (the 200 case).\n\n  To request a specific response from the mock, add this header:\n    x-mock-response-name: <exact name of the saved example>\n\nSee planning/ainotes/running-and-testing.md for the full testing guide.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5100",
+      "type": "string",
+      "description": "Base URL. Local dev: http://localhost:5100. Mock server: replace with Postman Mock URL."
+    },
+    {
+      "key": "tenant_id",
+      "value": "BLDK",
+      "type": "string",
+      "description": "Tenant ID to use in POST request bodies. Must match the tenant in the JWT (access_token)."
+    },
+    {
+      "key": "company_id",
+      "value": "BLDK-MAIN",
+      "type": "string"
+    },
+    {
+      "key": "branch_id",
+      "value": "BLDK-LON",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "dev-user-001",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Diagnostics",
+      "description": "Diagnostic and reference endpoints. No authentication required.",
+      "item": [
+        {
+          "name": "Hello World",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/hello-world",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "hello-world"]
+            },
+            "description": "Smoke-test endpoint. Returns message, server timestamp (UTC), and correlation_id. No authentication required.\n\nAll response fields use snake_case (e.g. correlation_id, not correlationId)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Correlation-ID", "value": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
+              ],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/hello-world",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["hello-world"]
+                }
+              },
+              "body": "{\n  \"message\": \"Hello, World!\",\n  \"timestamp\": \"2026-04-03T10:00:00+00:00\",\n  \"correlation_id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "HTTP Ping (HttpClient Reference)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/http-ping",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "http-ping"]
+            },
+            "description": "REFERENCE endpoint \u2014 demonstrates resilient outbound HttpClient.\n\nCalls GET /health/redis on the configured Services:NovaShell:BaseUrl (default: http://localhost:5100 \u2014 itself).\nTargets /health/redis (not /health) so the resilience pipeline does not retry on RabbitMQ health failures.\n\nThe call goes through the standard resilience pipeline:\n  - Retry: up to 3 attempts, exponential back-off with jitter, on 408/429/5xx\n  - Circuit breaker: opens after repeated failures; half-open after 30 s\n  - Per-attempt timeout: 10 s\n  - Total timeout: 30 s\n\nX-Correlation-ID is forwarded from the inbound request to the outbound call.\n\nSee HttpPingEndpoint.cs and Nova.Shared.Web/Http/HttpClientExtensions.cs for the implementation."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 Target healthy",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Correlation-ID", "value": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
+              ],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/http-ping",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "http-ping"]
+                }
+              },
+              "body": "{\n  \"target\": \"http://localhost:5100/health/redis\",\n  \"status\": 200,\n  \"is_success\": true,\n  \"latency_ms\": 12\n}"
+            }
+          ]
+        },
+        {
+          "name": "Test DB \u2014 MSSQL",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/test-db/mssql",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-db", "mssql"]
+            },
+            "description": "Executes SELECT code, value, crdate DepDate, [update] UpdatedOn FROM sales97.dbo.pointer against DiagnosticConnections:MsSql.\n\nReturns 503 if DiagnosticConnections:MsSql:Enabled is false (default) or the connection fails.\nSet Enabled: true in appsettings.json to activate.\n\ndep_date is a DateOnly (\"yyyy-MM-dd\") \u2014 no time component, no offset.\nupdated_on is a DateTimeOffset UTC (\"yyyy-MM-ddThh:mm:ss+00:00\") \u2014 original datetime column treated as UTC.\n\nTo get 503 Disabled from mock: x-mock-response-name: 503 Service Unavailable \u2014 Disabled\nTo get 503 Connection failed from mock: x-mock-response-name: 503 Service Unavailable \u2014 Connection failed"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Correlation-ID", "value": "b2c3d4e5-f6a7-8901-bcde-f12345678901" }
+              ],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/test-db/mssql",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-db", "mssql"]
+                }
+              },
+              "body": "[\n  { \"code\": \"CURR\",     \"value\": \"GBP\",            \"dep_date\": \"2026-01-15\", \"updated_on\": \"2026-04-03T10:00:00+00:00\" },\n  { \"code\": \"LANG\",     \"value\": \"EN\",             \"dep_date\": \"2026-01-15\", \"updated_on\": \"2026-04-03T10:00:00+00:00\" },\n  { \"code\": \"TIMEZONE\", \"value\": \"Europe/London\",  \"dep_date\": \"2026-01-15\", \"updated_on\": \"2026-04-03T10:00:00+00:00\" }\n]"
+            },
+            {
+              "name": "503 Service Unavailable \u2014 Disabled",
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-mock-response-name", "value": "503 Service Unavailable \u2014 Disabled" }],
+                "url": {
+                  "raw": "{{baseUrl}}/test-db/mssql",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-db", "mssql"]
+                }
+              },
+              "body": "{\n  \"error\": \"MSSQL diagnostic connection is disabled.\",\n  \"db\": \"mssql\"\n}"
+            },
+            {
+              "name": "503 Service Unavailable \u2014 Connection failed",
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-mock-response-name", "value": "503 Service Unavailable \u2014 Connection failed" }],
+                "url": {
+                  "raw": "{{baseUrl}}/test-db/mssql",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-db", "mssql"]
+                }
+              },
+              "body": "{\n  \"error\": \"A network-related or instance-specific error occurred while establishing a connection to SQL Server.\",\n  \"db\": \"mssql\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Test DB \u2014 Postgres",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/test-db/postgres",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-db", "postgres"]
+            },
+            "description": "Executes SELECT code, value FROM sales97.pointer against DiagnosticConnections:Postgres.\n\nReturns 503 if DiagnosticConnections:Postgres:Enabled is false (default) or the connection fails.\nSet Enabled: true in appsettings.json to activate.\n\nTo get 503 Disabled from mock: x-mock-response-name: 503 Service Unavailable \u2014 Disabled\nTo get 503 Connection failed from mock: x-mock-response-name: 503 Service Unavailable \u2014 Connection failed"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Correlation-ID", "value": "c3d4e5f6-a7b8-9012-cdef-123456789012" }
+              ],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/test-db/postgres",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-db", "postgres"]
+                }
+              },
+              "body": "[\n  { \"code\": \"CURR\",     \"value\": \"GBP\" },\n  { \"code\": \"LANG\",     \"value\": \"EN\" },\n  { \"code\": \"TIMEZONE\", \"value\": \"Europe/London\" }\n]"
+            },
+            {
+              "name": "503 Service Unavailable \u2014 Disabled",
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-mock-response-name", "value": "503 Service Unavailable \u2014 Disabled" }],
+                "url": {
+                  "raw": "{{baseUrl}}/test-db/postgres",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-db", "postgres"]
+                }
+              },
+              "body": "{\n  \"error\": \"Postgres diagnostic connection is disabled.\",\n  \"db\": \"postgres\"\n}"
+            },
+            {
+              "name": "503 Service Unavailable \u2014 Connection failed",
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-mock-response-name", "value": "503 Service Unavailable \u2014 Connection failed" }],
+                "url": {
+                  "raw": "{{baseUrl}}/test-db/postgres",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-db", "postgres"]
+                }
+              },
+              "body": "{\n  \"error\": \"Connection refused (localhost:5432)\",\n  \"db\": \"postgres\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Test Cache \u2014 GET",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/test-cache",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-cache"]
+            },
+            "description": "REFERENCE \u2014 demonstrates ICacheService.GetOrSetAsync.\n\nFirst call stores the current UTC timestamp under key nova:test:hello using the ReferenceData profile (Redis, 1 hour TTL).\nSubsequent calls return the same cached_at value until the key expires or DELETE /test-cache is called.\n\nIf Redis is unavailable, the factory is always invoked (cache miss fallback \u2014 app works without cache).\n\nSee TestCacheEndpoint.cs for the implementation and usage pattern."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 Cached timestamp (same shape on hit and miss)",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Correlation-ID", "value": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
+              ],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{baseUrl}}/test-cache", "host": ["{{baseUrl}}"], "path": ["test-cache"] }
+              },
+              "body": "{\n  \"cached_at\": \"2026-04-03T10:00:00+00:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Test Cache \u2014 DELETE (Invalidate)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/test-cache",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-cache"]
+            },
+            "description": "REFERENCE \u2014 demonstrates ICacheService.InvalidateAsync.\n\nRemoves the nova:test:hello key from Redis. The next GET /test-cache will run the factory again and store a fresh timestamp."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 Key invalidated",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": { "raw": "{{baseUrl}}/test-cache", "host": ["{{baseUrl}}"], "path": ["test-cache"] }
+              },
+              "body": "{\n  \"invalidated\": \"nova:test:hello\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Test Lock \u2014 Acquire and Release",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/test-lock",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-lock"]
+            },
+            "description": "REFERENCE \u2014 demonstrates IDistributedLockService.TryAcquireAsync.\n\nAcquires the lock on nova:test:lock (30 s expiry), runs the critical section (immediate), then releases via Lua script.\nReturns 200 if Redis is available and the lock is not held.\nReturns 409 Conflict if the lock is already held.\n\nTo test contention:\n  1. Send GET /test-lock?hold=10 (hangs for 10 s while holding the lock)\n  2. Immediately send GET /test-lock from a second tab \u2014 returns 409\n  3. After 10 s the first call returns 200 and releases the lock\n\nSee TestLockEndpoint.cs for the implementation and usage pattern."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 Lock acquired and released",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Correlation-ID", "value": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
+              ],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{baseUrl}}/test-lock", "host": ["{{baseUrl}}"], "path": ["test-lock"] }
+              },
+              "body": "{\n  \"acquired\": true,\n  \"resource\": \"nova:test:lock\",\n  \"held_for_ms\": 5,\n  \"held_for_seconds\": 0\n}"
+            },
+            {
+              "name": "409 Conflict \u2014 Lock already held",
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-mock-response-name", "value": "409 Conflict \u2014 Lock already held" }],
+                "url": { "raw": "{{baseUrl}}/test-lock", "host": ["{{baseUrl}}"], "path": ["test-lock"] }
+              },
+              "body": "{\n  \"acquired\": false,\n  \"resource\": \"nova:test:lock\",\n  \"reason\": \"Lock is held by another instance, or Redis is unavailable.\",\n  \"hint\": \"Call GET /test-lock?hold=10 first, then immediately call GET /test-lock from a second client to see this response.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Test Lock \u2014 Hold for N seconds (Contention Test)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/test-lock?hold=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-lock"],
+              "query": [
+                { "key": "hold", "value": "10", "description": "Hold the lock for this many seconds (max 30)." }
+              ]
+            },
+            "description": "Acquires the lock and holds it for the specified number of seconds before releasing.\nUse to simulate a slow critical section and test contention from a second client.\n\nSend this first, then immediately send GET /test-lock from another Postman tab to see 409 Conflict."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 Lock held for 10 s then released",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/test-lock?hold=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-lock"],
+                  "query": [{ "key": "hold", "value": "10" }]
+                }
+              },
+              "body": "{\n  \"acquired\": true,\n  \"resource\": \"nova:test:lock\",\n  \"held_for_ms\": 10003,\n  \"held_for_seconds\": 10\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Echo (Reference \u2014 Validation + Problem Details)",
+      "description": "POST /echo is the reference endpoint demonstrating all Nova API conventions:\n  - RequestContext inheritance (7 standard fields in every POST body)\n  - RequestContextValidator.Validate() for standard fields (400)\n  - Tenant mismatch check (403)\n  - Domain field validation (400)\n  - Business rule violation (404 / 422)\n  - Unhandled exception \u2192 500 Problem Details (no stack trace)\n  - snake_case request binding and response\n\nThis folder has a separate request for each scenario so each can be tested independently.\nRequireAuthorization() is applied \u2014 a valid JWT (access_token) is required for all requests in this folder.",
+      "item": [
+        {
+          "name": "Echo \u2014 Happy Path",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"branch_id\": \"{{branch_id}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\",\n  \"message\": \"Hello from Postman\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/echo",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "echo"]
+            },
+            "description": "All required fields present. Returns 200 with echo, received_at (UTC), correlation_id.\n\nNote: tenant_id in the body must match the tenant in the JWT when RequireAuthorization is added."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 Echo response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Correlation-ID", "value": "d4e5f6a7-b8c9-0123-defa-234567890123" }
+              ],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"BLDK-MAIN\",\n  \"branch_id\": \"BLDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\",\n  \"message\": \"Hello from Postman\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/echo",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["echo"]
+                }
+              },
+              "body": "{\n  \"echo\": \"Hello from Postman\",\n  \"received_at\": \"2026-04-03T10:00:00+00:00\",\n  \"correlation_id\": \"d4e5f6a7-b8c9-0123-defa-234567890123\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Echo \u2014 400 Missing Context Fields",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Hello\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/echo",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "echo"]
+            },
+            "description": "Omits all RequestContext fields. RequestContextValidator.Validate() returns errors for tenant_id, company_id, branch_id, user_id. Returns 400 ValidationProblem with per-field errors."
+          },
+          "response": [
+            {
+              "name": "400 Validation Failed \u2014 Missing context fields",
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/problem+json" },
+                { "key": "X-Correlation-ID", "value": "e5f6a7b8-c9d0-1234-efab-345678901234" }
+              ],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"message\": \"Hello\"\n}" },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/echo",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["echo"]
+                }
+              },
+              "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Validation failed\",\n  \"status\": 400,\n  \"errors\": {\n    \"tenant_id\": [\"tenant_id is required.\"],\n    \"company_id\": [\"company_id is required.\"],\n    \"branch_id\":  [\"branch_id is required.\"],\n    \"user_id\":    [\"user_id is required.\"]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Echo \u2014 400 Missing Domain Field",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"branch_id\": \"{{branch_id}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\": \"\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/echo",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "echo"]
+            },
+            "description": "All context fields present but message is empty string. Returns 400 ValidationProblem with errors.message."
+          },
+          "response": [
+            {
+              "name": "400 Validation Failed \u2014 Empty message",
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/problem+json" },
+                { "key": "X-Correlation-ID", "value": "f6a7b8c9-d0e1-2345-fabc-456789012345" }
+              ],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"BLDK-MAIN\",\n  \"branch_id\": \"BLDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\": \"\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/echo",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["echo"]
+                }
+              },
+              "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Validation failed\",\n  \"status\": 400,\n  \"errors\": {\n    \"message\": [\"message is required.\"]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Echo \u2014 404 Not Found",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"branch_id\": \"{{branch_id}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\": \"not-found\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/echo",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "echo"]
+            },
+            "description": "message = 'not-found' triggers the explicit 404 Problem Details return. Demonstrates how to return a not-found response from an endpoint."
+          },
+          "response": [
+            {
+              "name": "404 Not Found \u2014 Problem Details",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/problem+json" },
+                { "key": "X-Correlation-ID", "value": "a7b8c9d0-e1f2-3456-abcd-567890123456" }
+              ],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"BLDK-MAIN\",\n  \"branch_id\": \"BLDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\": \"not-found\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/echo",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["echo"]
+                }
+              },
+              "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.5\",\n  \"title\": \"Resource not found\",\n  \"status\": 404,\n  \"detail\": \"No resource matches the supplied identifier.\",\n  \"extensions\": {\n    \"correlation_id\": \"a7b8c9d0-e1f2-3456-abcd-567890123456\",\n    \"trace_id\": \"00-abc123-def456-01\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Echo \u2014 500 Unhandled Exception",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"branch_id\": \"{{branch_id}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\": \"throw\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/echo",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "echo"]
+            },
+            "description": "message = 'throw' triggers a deliberate unhandled exception. UseNovaProblemDetails catches it and returns 500 Problem Details. Verify: no stack trace in body, correlation_id and trace_id present."
+          },
+          "response": [
+            {
+              "name": "500 Internal Server Error \u2014 Unhandled exception",
+              "status": "Internal Server Error",
+              "code": 500,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/problem+json" },
+                { "key": "X-Correlation-ID", "value": "b8c9d0e1-f2a3-4567-bcde-678901234567" }
+              ],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"BLDK-MAIN\",\n  \"branch_id\": \"BLDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\": \"throw\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/echo",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["echo"]
+                }
+              },
+              "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"extensions\": {\n    \"correlation_id\": \"b8c9d0e1-f2a3-4567-bcde-678901234567\",\n    \"trace_id\": \"00-def456-abc123-01\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Echo \u2014 404 Unknown Route (Problem Details)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/does-not-exist",
+              "host": ["{{baseUrl}}"],
+              "path": ["does-not-exist"]
+            },
+            "description": "Hits a route that does not exist. UseNovaProblemDetails (via UseStatusCodePages) formats the 404 as Problem Details. Verify: Content-Type is application/problem+json, correlation_id and trace_id are present."
+          },
+          "response": [
+            {
+              "name": "404 Not Found \u2014 Unknown route",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/problem+json" },
+                { "key": "X-Correlation-ID", "value": "c9d0e1f2-a3b4-5678-cdef-789012345678" }
+              ],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/does-not-exist",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["does-not-exist"]
+                }
+              },
+              "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.5\",\n  \"title\": \"Not Found\",\n  \"status\": 404,\n  \"extensions\": {\n    \"correlation_id\": \"c9d0e1f2-a3b4-5678-cdef-789012345678\",\n    \"trace_id\": \"00-ghi789-jkl012-01\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Echo List (Reference \u2014 Pagination Contract)",
+      "description": "POST /echo/list demonstrates the Nova pagination contract:\n  - Request inherits PagedRequest (7 context fields + page_number + page_size)\n  - Validation: RequestContextValidator \u2192 TenantMatches \u2192 PagedRequestValidator \u2192 domain\n  - Response: PagedResult<T> with items, total_count, page_number, page_size, total_pages, has_next_page, has_previous_page\n  - SQL pattern: dialect.PaginationClause(request.Skip, request.PageSize)\n\nSimulates 47 total items. Adjust page_number and page_size to verify paging behaviour.",
+      "item": [
+        {
+          "name": "Echo List \u2014 Happy Path (page 1)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"branch_id\": \"{{branch_id}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"page_number\": 1,\n  \"page_size\": 10\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/echo/list",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "echo", "list"]
+            },
+            "description": "Page 1 of 5. Expect 10 items, total_count=47, total_pages=5, has_next_page=true, has_previous_page=false."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 Page 1 of 5",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Correlation-ID", "value": "e1f2a3b4-c5d6-7890-efab-123456789012" }
+              ],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"BLDK-MAIN\",\n  \"branch_id\": \"BLDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"page_number\": 1,\n  \"page_size\": 10\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/echo/list",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["echo", "list"]
+                }
+              },
+              "body": "{\n  \"items\": [\n    { \"id\": \"item-001\", \"label\": \"Echo item 1 (tenant: BLDK)\" },\n    { \"id\": \"item-002\", \"label\": \"Echo item 2 (tenant: BLDK)\" },\n    { \"id\": \"item-003\", \"label\": \"Echo item 3 (tenant: BLDK)\" },\n    { \"id\": \"item-004\", \"label\": \"Echo item 4 (tenant: BLDK)\" },\n    { \"id\": \"item-005\", \"label\": \"Echo item 5 (tenant: BLDK)\" },\n    { \"id\": \"item-006\", \"label\": \"Echo item 6 (tenant: BLDK)\" },\n    { \"id\": \"item-007\", \"label\": \"Echo item 7 (tenant: BLDK)\" },\n    { \"id\": \"item-008\", \"label\": \"Echo item 8 (tenant: BLDK)\" },\n    { \"id\": \"item-009\", \"label\": \"Echo item 9 (tenant: BLDK)\" },\n    { \"id\": \"item-010\", \"label\": \"Echo item 10 (tenant: BLDK)\" }\n  ],\n  \"total_count\": 47,\n  \"page_number\": 1,\n  \"page_size\": 10,\n  \"total_pages\": 5,\n  \"has_next_page\": true,\n  \"has_previous_page\": false\n}"
+            }
+          ]
+        },
+        {
+          "name": "Echo List \u2014 Last Page (page 5)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"branch_id\": \"{{branch_id}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"page_number\": 5,\n  \"page_size\": 10\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/echo/list",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "echo", "list"]
+            },
+            "description": "Page 5 (last page). Items 41\u201347 = 7 items. has_next_page=false, has_previous_page=true."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 Last page (7 items)",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"BLDK-MAIN\",\n  \"branch_id\": \"BLDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"page_number\": 5,\n  \"page_size\": 10\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/echo/list",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["echo", "list"]
+                }
+              },
+              "body": "{\n  \"items\": [\n    { \"id\": \"item-041\", \"label\": \"Echo item 41 (tenant: BLDK)\" },\n    { \"id\": \"item-042\", \"label\": \"Echo item 42 (tenant: BLDK)\" },\n    { \"id\": \"item-043\", \"label\": \"Echo item 43 (tenant: BLDK)\" },\n    { \"id\": \"item-044\", \"label\": \"Echo item 44 (tenant: BLDK)\" },\n    { \"id\": \"item-045\", \"label\": \"Echo item 45 (tenant: BLDK)\" },\n    { \"id\": \"item-046\", \"label\": \"Echo item 46 (tenant: BLDK)\" },\n    { \"id\": \"item-047\", \"label\": \"Echo item 47 (tenant: BLDK)\" }\n  ],\n  \"total_count\": 47,\n  \"page_number\": 5,\n  \"page_size\": 10,\n  \"total_pages\": 5,\n  \"has_next_page\": false,\n  \"has_previous_page\": true\n}"
+            }
+          ]
+        },
+        {
+          "name": "Echo List \u2014 400 Invalid page_number",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"branch_id\": \"{{branch_id}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"page_number\": 0,\n  \"page_size\": 10\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/echo/list",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "echo", "list"]
+            },
+            "description": "page_number=0 is invalid (must be 1 or greater). Returns 400 with errors.page_number."
+          },
+          "response": [
+            {
+              "name": "400 Validation Failed \u2014 Invalid page_number",
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/problem+json" }],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"BLDK-MAIN\",\n  \"branch_id\": \"BLDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"page_number\": 0,\n  \"page_size\": 10\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/echo/list",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["echo", "list"]
+                }
+              },
+              "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Validation failed\",\n  \"status\": 400,\n  \"errors\": {\n    \"page_number\": [\"page_number must be 1 or greater.\"]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Echo List \u2014 400 Invalid page_size",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_id\": \"{{company_id}}\",\n  \"branch_id\": \"{{branch_id}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"page_number\": 1,\n  \"page_size\": 250\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/echo/list",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "echo", "list"]
+            },
+            "description": "page_size=250 exceeds MaxPageSize=100. Returns 400 with errors.page_size."
+          },
+          "response": [
+            {
+              "name": "400 Validation Failed \u2014 page_size exceeds maximum",
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/problem+json" }],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"BLDK-MAIN\",\n  \"branch_id\": \"BLDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"page_number\": 1,\n  \"page_size\": 250\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/echo/list",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["echo", "list"]
+                }
+              },
+              "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Validation failed\",\n  \"status\": 400,\n  \"errors\": {\n    \"page_size\": [\"page_size must be between 1 and 100.\"]\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Internal Auth (Reference)",
+      "description": "Service-to-service JWT authentication. Nova services use a separate InternalJwt scheme (aud=nova-internal) rather than user JWTs (aud=nova-api).\n\nThree endpoints for development and testing:\n  GET /test-internal-auth/token     \u2014 returns the raw outbound service token for inspection\n  GET /test-internal-auth/protected \u2014 requires InternalService policy (InternalJwt bearer)\n  GET /test-internal-auth/call-self \u2014 calls /protected on itself via the internal HTTP client (full round-trip)\n\nDelete these endpoints before cloning for production.\nSee TestInternalAuthEndpoint.cs and nova-shell-api-guide.md for full documentation.",
+      "item": [
+        {
+          "name": "Internal Auth \u2014 Get Token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/test-internal-auth/token",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-internal-auth", "token"]
+            },
+            "description": "Returns the current outbound service token for inspection. No auth required.\n\nDecode the token at https://jwt.io and verify:\n  sub = \"nova-shell\"  (ServiceName from appsettings.json)\n  aud = \"nova-internal\"\n  iss = \"https://auth.nova.internal\"\n\nTokens are cached and renewed 30 s before expiry (TokenLifetimeSeconds = 300)."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 Service token",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/test-internal-auth/token",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-internal-auth", "token"]
+                }
+              },
+              "body": "{\n  \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJub3ZhLXNoZWxsIiwiYXVkIjoibm92YS1pbnRlcm5hbCIsImlzcyI6Imh0dHBzOi8vYXV0aC5ub3ZhLmludGVybmFsIiwiZXhwIjoxNzQzNjgwMDAwfQ.SIGNATURE\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Internal Auth \u2014 Protected (Valid Internal Token)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{internal_token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/test-internal-auth/protected",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-internal-auth", "protected"]
+            },
+            "description": "Protected endpoint requiring InternalService policy (InternalJwt scheme).\n\nTo call manually:\n  1. GET /test-internal-auth/token \u2014 copy the token value\n  2. Set Authorization: Bearer <token> on this request\n  3. Expect 200\n\nUse the {{internal_token}} variable or paste the token directly into the Bearer field."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 Internal call accepted",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer <internal-jwt>" }],
+                "url": {
+                  "raw": "{{baseUrl}}/test-internal-auth/protected",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-internal-auth", "protected"]
+                }
+              },
+              "body": "{\n  \"message\": \"internal call accepted\",\n  \"caller_service\": \"nova-shell\",\n  \"received_at\": \"2026-04-03T10:00:00+00:00\"\n}"
+            },
+            {
+              "name": "401 Unauthorized \u2014 No token",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/problem+json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/test-internal-auth/protected",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-internal-auth", "protected"]
+                }
+              },
+              "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401\n}"
+            },
+            {
+              "name": "403 Forbidden \u2014 User JWT (wrong audience)",
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/problem+json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer <user-jwt-with-aud=nova-api>" }],
+                "url": {
+                  "raw": "{{baseUrl}}/test-internal-auth/protected",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-internal-auth", "protected"]
+                }
+              },
+              "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.4\",\n  \"title\": \"Forbidden\",\n  \"status\": 403\n}"
+            }
+          ]
+        },
+        {
+          "name": "Internal Auth \u2014 Call Self (Full Round-Trip)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/test-internal-auth/call-self",
+              "host": ["{{baseUrl}}"],
+              "path": ["test-internal-auth", "call-self"]
+            },
+            "description": "Calls /test-internal-auth/protected on itself via the nova-shell-internal HTTP client.\nDemonstrates the full round-trip: generate token \u2192 ServiceTokenHandler attaches it \u2192 InternalJwt validates it.\n\nExpect 200 with the same response shape as the protected endpoint."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 Round-trip successful",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/test-internal-auth/call-self",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-internal-auth", "call-self"]
+                }
+              },
+              "body": "{\n  \"message\": \"internal call accepted\",\n  \"caller_service\": \"nova-shell\",\n  \"received_at\": \"2026-04-03T10:00:00+00:00\"\n}"
+            },
+            {
+              "name": "502 Bad Gateway \u2014 Protected endpoint unreachable",
+              "status": "Bad Gateway",
+              "code": 502,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/problem+json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-mock-response-name", "value": "502 Bad Gateway \u2014 Protected endpoint unreachable" }],
+                "url": {
+                  "raw": "{{baseUrl}}/test-internal-auth/call-self",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["test-internal-auth", "call-self"]
+                }
+              },
+              "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.3\",\n  \"title\": \"Internal call failed\",\n  \"status\": 502,\n  \"detail\": \"Protected endpoint returned 401\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Health Checks",
+      "description": "ASP.NET Core health check endpoints. No authentication required.\n\n  GET /health            \u2014 aggregate (Redis + RabbitMQ)\n  GET /health/redis      \u2014 Redis only (managed by Aspire)\n  GET /health/rabbitmq   \u2014 RabbitMQ broker connectivity\n  GET /health/db/{tenantId} \u2014 per-tenant database connectivity (tenant's own connection string)",
+      "item": [
+        {
+          "name": "Health \u2014 Aggregate",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Aggregate health check (Redis + RabbitMQ). 200 if all pass; 503 if any fail.\n\nNote: per-engine DB health is checked per-tenant via GET /health/db/{tenantId}, not here.\n\nTo get 503 from mock: x-mock-response-name: 503 Service Unavailable \u2014 RabbitMQ unhealthy"
+          },
+          "response": [
+            {
+              "name": "200 Healthy",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+              },
+              "body": "{\n  \"status\": \"Healthy\",\n  \"results\": {\n    \"redis\":    { \"status\": \"Healthy\" },\n    \"rabbitmq\": { \"status\": \"Healthy\", \"description\": \"RabbitMQ connection is healthy.\" }\n  }\n}"
+            },
+            {
+              "name": "503 Service Unavailable \u2014 RabbitMQ unhealthy",
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-mock-response-name", "value": "503 Service Unavailable \u2014 RabbitMQ unhealthy" }],
+                "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+              },
+              "body": "{\n  \"status\": \"Unhealthy\",\n  \"results\": {\n    \"redis\":    { \"status\": \"Healthy\" },\n    \"rabbitmq\": { \"status\": \"Unhealthy\", \"description\": \"RabbitMQ connection failed.\", \"exception\": \"None of the specified endpoints were reachable\" }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Health \u2014 Redis",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/redis",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "redis"]
+            },
+            "description": "Redis-only health check. Managed by Aspire (AddRedisClient). Should always be healthy in dev.\n\nTo get 503 from mock: x-mock-response-name: 503 Service Unavailable \u2014 Redis down"
+          },
+          "response": [
+            {
+              "name": "200 Healthy",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{baseUrl}}/health/redis", "host": ["{{baseUrl}}"], "path": ["health", "redis"] }
+              },
+              "body": "{\n  \"status\": \"Healthy\",\n  \"results\": {\n    \"redis\": { \"status\": \"Healthy\" }\n  }\n}"
+            },
+            {
+              "name": "503 Service Unavailable \u2014 Redis down",
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-mock-response-name", "value": "503 Service Unavailable \u2014 Redis down" }],
+                "url": { "raw": "{{baseUrl}}/health/redis", "host": ["{{baseUrl}}"], "path": ["health", "redis"] }
+              },
+              "body": "{\n  \"status\": \"Unhealthy\",\n  \"results\": {\n    \"redis\": { \"status\": \"Unhealthy\", \"exception\": \"No connection is available to service this operation\" }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Health \u2014 RabbitMQ",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/rabbitmq",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "rabbitmq"]
+            },
+            "description": "RabbitMQ-only health check. Tries to open a connection to the broker configured in appsettings.json \u2192 RabbitMq.\nConnection timeout: 5 s.\n\nRequires RabbitMQ to be running: docker run -d --name nova-rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:management\n\nTo get 503 from mock: x-mock-response-name: 503 Service Unavailable \u2014 RabbitMQ down"
+          },
+          "response": [
+            {
+              "name": "200 Healthy",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{baseUrl}}/health/rabbitmq", "host": ["{{baseUrl}}"], "path": ["health", "rabbitmq"] }
+              },
+              "body": "{\n  \"status\": \"Healthy\",\n  \"results\": {\n    \"rabbitmq\": { \"status\": \"Healthy\", \"description\": \"RabbitMQ connection is healthy.\" }\n  }\n}"
+            },
+            {
+              "name": "503 Service Unavailable \u2014 RabbitMQ down",
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-mock-response-name", "value": "503 Service Unavailable \u2014 RabbitMQ down" }],
+                "url": { "raw": "{{baseUrl}}/health/rabbitmq", "host": ["{{baseUrl}}"], "path": ["health", "rabbitmq"] }
+              },
+              "body": "{\n  \"status\": \"Unhealthy\",\n  \"results\": {\n    \"rabbitmq\": { \"status\": \"Unhealthy\", \"description\": \"RabbitMQ connection failed.\", \"exception\": \"None of the specified endpoints were reachable\" }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Health \u2014 DB by Tenant",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/db/BLDK",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "db", "BLDK"]
+            },
+            "description": "Per-tenant database connectivity check. Opens a connection using the tenant's own encrypted connection string (not DiagnosticConnections) and executes SELECT 1.\n\nChange the path segment to test a different tenant (e.g. /health/db/client-b).\n\nReturns:\n  200 \u2014 healthy with latency_ms\n  503 \u2014 unhealthy with error message\n  404 \u2014 unknown tenantId\n\nTo get 503 from mock: x-mock-response-name: 503 Service Unavailable \u2014 DB unreachable\nTo get 404 from mock: x-mock-response-name: 404 Not Found \u2014 Unknown tenant"
+          },
+          "response": [
+            {
+              "name": "200 Healthy",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{baseUrl}}/health/db/BLDK", "host": ["{{baseUrl}}"], "path": ["health", "db", "BLDK"] }
+              },
+              "body": "{\n  \"tenant_id\": \"BLDK\",\n  \"db_type\": \"MsSql\",\n  \"status\": \"healthy\",\n  \"latency_ms\": 12\n}"
+            },
+            {
+              "name": "503 Service Unavailable \u2014 DB unreachable",
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-mock-response-name", "value": "503 Service Unavailable \u2014 DB unreachable" }],
+                "url": { "raw": "{{baseUrl}}/health/db/BLDK", "host": ["{{baseUrl}}"], "path": ["health", "db", "BLDK"] }
+              },
+              "body": "{\n  \"tenant_id\": \"BLDK\",\n  \"db_type\": \"MsSql\",\n  \"status\": \"unhealthy\",\n  \"error\": \"A network-related or instance-specific error occurred while establishing a connection to SQL Server.\",\n  \"latency_ms\": 5001\n}"
+            },
+            {
+              "name": "404 Not Found \u2014 Unknown tenant",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "x-mock-response-name", "value": "404 Not Found \u2014 Unknown tenant" }],
+                "url": { "raw": "{{baseUrl}}/health/db/unknown", "host": ["{{baseUrl}}"], "path": ["health", "db", "unknown"] }
+              },
+              "body": "{\n  \"error\": \"Tenant 'unknown' not found.\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Administrative endpoints. No auth required in dev \u2014 add InternalService policy in production.\n\nMigrations are NOT run automatically at startup. Call POST /admin/migrations/run explicitly after each deployment.",
+      "item": [
+        {
+          "name": "Run Migrations \u2014 All Tenants",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/migrations/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "migrations", "run"]
+            },
+            "description": "Runs pending DbUp migrations for ALL tenants in the registry.\n\nScripts containing commands in migrationpolicy.json apply automatically.\nScripts containing unlisted commands are blocked, logged, and skipped \u2014 run manually then journal into SchemaVersions.\n\nReturns a summary per tenant: applied count, blocked count, and details of any blocked scripts.\n\nTo get the blocked example from mock: x-mock-response-name: 200 OK \u2014 Blocked script"
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 All applied",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/migrations/run",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "migrations", "run"]
+                }
+              },
+              "body": "{\n  \"migrations\": [\n    { \"tenant_id\": \"BLDK\",     \"applied\": 2, \"blocked\": 0, \"blocked_scripts\": [] },\n    { \"tenant_id\": \"client-b\", \"applied\": 2, \"blocked\": 0, \"blocked_scripts\": [] }\n  ]\n}"
+            },
+            {
+              "name": "200 OK \u2014 Already up to date",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "x-mock-response-name", "value": "200 OK \u2014 Already up to date" }],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/migrations/run",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "migrations", "run"]
+                }
+              },
+              "body": "{\n  \"migrations\": [\n    { \"tenant_id\": \"BLDK\",     \"applied\": 0, \"blocked\": 0, \"blocked_scripts\": [] },\n    { \"tenant_id\": \"client-b\", \"applied\": 0, \"blocked\": 0, \"blocked_scripts\": [] }\n  ]\n}"
+            },
+            {
+              "name": "200 OK \u2014 Blocked script",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "x-mock-response-name", "value": "200 OK \u2014 Blocked script" }],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/migrations/run",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "migrations", "run"]
+                }
+              },
+              "body": "{\n  \"migrations\": [\n    {\n      \"tenant_id\": \"BLDK\",\n      \"applied\": 0,\n      \"blocked\": 1,\n      \"blocked_scripts\": [\n        {\n          \"name\": \"V003__drop_legacy_table.sql\",\n          \"reasons\": [\"DROP TABLE is not permitted by migration policy. Add to MigrationPolicy:MsSql to allow.\"]\n        }\n      ]\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Run Migrations \u2014 Single Tenant",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/migrations/run?tenantId=BLDK",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "migrations", "run"],
+              "query": [
+                { "key": "tenantId", "value": "BLDK", "description": "Run migrations for this tenant only." }
+              ]
+            },
+            "description": "Runs pending DbUp migrations for a single tenant only.\n\nChange the tenantId query parameter to target a different tenant.\nReturns 404 if the tenantId is not found in the registry."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 Single tenant applied",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/migrations/run?tenantId=BLDK",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "migrations", "run"],
+                  "query": [{ "key": "tenantId", "value": "BLDK" }]
+                }
+              },
+              "body": "{\n  \"migrations\": [\n    { \"tenant_id\": \"BLDK\", \"applied\": 1, \"blocked\": 0, \"blocked_scripts\": [] }\n  ]\n}"
+            },
+            {
+              "name": "404 Not Found \u2014 Unknown tenantId",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "x-mock-response-name", "value": "404 Not Found \u2014 Unknown tenantId" }],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/migrations/run?tenantId=unknown",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "migrations", "run"],
+                  "query": [{ "key": "tenantId", "value": "unknown" }]
+                }
+              },
+              "body": "{\n  \"error\": \"No tenant found with id 'unknown'.\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

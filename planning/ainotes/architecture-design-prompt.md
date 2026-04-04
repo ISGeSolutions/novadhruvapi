@@ -13,8 +13,7 @@ I want to design a **.NET 10.0+ API** using the latest version of C#.
 This API will be used for a **commercial product** and will be part of a **microservices architecture** with **10+ API services**, one per domain.
 
 The API is:
-- **Multi-tenant**
-- Uses a **shared database** with a mandatory `tenant_id` column
+- **Multi-tenant** — **one separate database per tenant** (not a shared database with `tenant_id` row filtering)
 - Designed for **highly transactional workloads** (bookings, financials, stateful workflows)
 
 **Do not generate any code.**  
@@ -245,6 +244,57 @@ Please discuss:
 - Ownership boundaries
 - How to safely regenerate AI-owned code without damaging core logic
 - How to keep documentation at class/method level consistent and maintainable
+
+---
+
+## API Conventions
+
+### HTTP Method Convention
+
+- **All data-retrieval endpoints use POST** (not GET). Request parameters are passed in the JSON body, not as URL query strings. This keeps sensitive filters (tenant, user, date ranges, etc.) out of URLs, server logs, browser history, and reverse-proxy access logs.
+- **PATCH** is used for partial-update operations (e.g. saving a booking, updating client details).
+- GET is reserved for truly parameter-free operations (e.g. `/health`, `/hello-world`).
+
+### Standard Context Fields (Auto-Injected by Frontend)
+
+Every POST and PATCH request sent by the frontend `apiClient` (`src/services/apiNovaDhruvUxConfig.ts`) is automatically enriched with the following 7 fields in the JSON body. These fields **must not be manually specified** by frontend service files — they are injected by the client. The backend must read and trust them (within the bounds of JWT-verified tenant context).
+
+**API Context** (from tenant configuration):
+
+| Field | Type | Description |
+|---|---|---|
+| `tenant_id` | string | Current tenant identifier |
+| `company_id` | string | Current company identifier |
+| `branch_id` | string | Current branch identifier |
+| `user_id` | string | Current user identifier |
+
+**Client Context** (captured on startup):
+
+| Field | Type | Description |
+|---|---|---|
+| `browser_locale` | string | `navigator.language` (e.g. `"en-GB"`) |
+| `browser_timezone` | string | IANA timezone (e.g. `"Europe/London"`) |
+| `ip_address` | string \| null | Client IP from ipify.org on startup (fallback: null) |
+
+**Backend handling rules:**
+- Define a shared `RequestContext` record in `Nova.Shared` with these 7 properties — used as a base for all command/query request bodies.
+- `tenant_id` in the body must be validated against the `TenantContext` resolved from the JWT claim — they must match. Mismatch = 403.
+- `ip_address` from the body is client-reported and unverified. The server **must also read `X-Forwarded-For`** (or `RemoteIpAddress`) as the authoritative IP for audit logging. The body value is stored as `updated_at` (audit column); the header value is used for security logging.
+- `browser_locale` and `browser_timezone` are stored per-session for display/formatting preferences — not used in business logic.
+
+---
+
+## Local Development Orchestration
+
+The project uses **.NET Aspire** for local multi-service orchestration only.
+
+Decisions made:
+- **`aspire.cli` global tool** (`dotnet tool install -g aspire.cli`) — no workload install
+- **AppHost project** at `src/host/Nova.AppHost/` using `Sdk="Aspire.AppHost.Sdk/<version>"`
+- **Do NOT use `AddServiceDefaults()`** — Nova.Shared is the canonical cross-cutting library; ServiceDefaults would conflict with Serilog, OTel, and health check setup
+- **AppHost is dev-only** — production deployments use Docker Compose / Kubernetes
+- Run all services + Aspire dashboard with: `aspire run` (from repo root, requires `aspire.config.json` at root)
+- Each new domain service is added to AppHost with a single `builder.AddProject<Projects.Nova_Xyz_Api>("xyz")` line
 
 ---
 

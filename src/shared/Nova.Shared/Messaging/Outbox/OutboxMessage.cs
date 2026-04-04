@@ -13,13 +13,13 @@ public sealed record OutboxMessage
     public required string TenantId { get; init; }
 
     /// <summary>When the message was created (UTC).</summary>
-    public required DateTime CreatedOn { get; init; }
+    public required DateTimeOffset CreatedOn { get; init; }
 
     /// <summary>When the message is scheduled for delivery (UTC), if applicable.</summary>
-    public DateTime? ScheduledOn { get; init; }
+    public DateTimeOffset? ScheduledOn { get; init; }
 
     /// <summary>When the message was successfully processed (UTC).</summary>
-    public DateTime? ProcessedOn { get; init; }
+    public DateTimeOffset? ProcessedOn { get; init; }
 
     /// <summary>Target exchange name.</summary>
     public required string Exchange { get; init; }

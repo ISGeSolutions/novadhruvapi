@@ -23,8 +23,12 @@ public static class TestDbPostgresEndpoint
 
             try
             {
+                if (!settings.DiagnosticConnections.Postgres.Enabled)
+                    return Results.Json(new { error = "Postgres diagnostic connection is disabled.", db = "postgres" },
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+
                 using IDbConnection connection = connectionFactory.CreateFromConnectionString(
-                    settings.DiagnosticConnections.Postgres,
+                    settings.DiagnosticConnections.Postgres.ConnectionString,
                     NovaDbType.Postgres);
 
                 string sql = "SELECT code, value FROM " + tableRef;

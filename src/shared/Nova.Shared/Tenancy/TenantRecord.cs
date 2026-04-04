@@ -1,4 +1,5 @@
 using Nova.Shared.Data;
+using Nova.Shared.Messaging;
 
 namespace Nova.Shared.Tenancy;
 
@@ -19,4 +20,11 @@ public sealed record TenantRecord
 
     /// <summary>Schema version: <c>legacy</c> or <c>v1</c>.</summary>
     public required string SchemaVersion { get; init; }
+
+    /// <summary>
+    /// Message broker used by the outbox relay for this tenant.
+    /// Defaults to <see cref="BrokerType.RabbitMq"/> if not specified.
+    /// Configured in <c>appsettings.json → Tenants[].BrokerType</c>.
+    /// </summary>
+    public BrokerType BrokerType { get; init; } = BrokerType.RabbitMq;
 }

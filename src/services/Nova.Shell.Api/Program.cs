@@ -7,10 +7,20 @@ using NovaDbType = Nova.Shared.Data.DbType;
 using Nova.Shared.Logging;
 using Nova.Shared.Observability;
 using Nova.Shared.Tenancy;
+using Asp.Versioning;
 using Nova.Shared.Web.Auth;
+using Nova.Shared.Web.Errors;
+using Nova.Shared.Web.Http;
 using Nova.Shared.Web.Middleware;
 using Nova.Shared.Web.Observability;
+using Nova.Shared.Web.Caching;
+using Nova.Shared.Web.Locking;
+using Nova.Shared.Web.Messaging;
+using Nova.Shared.Web.Migrations;
+using Nova.Shared.Web.RateLimiting;
+using Nova.Shared.Web.Serialisation;
 using Nova.Shared.Web.Tenancy;
+using Nova.Shared.Web.Versioning;
 using Nova.Shell.Api.Endpoints;
 using Nova.Shell.Api.HealthChecks;
 
@@ -40,21 +50,72 @@ AppSettings appSettingsForOtel = new();
 builder.Configuration.Bind(appSettingsForOtel);
 if (consoleMode) Console.WriteLine($"[OTel] Configured. Endpoint: {appSettingsForOtel.OpenTelemetry.OtlpEndpoint}");
 
-// 5. JWT authentication
+// 5. JWT authentication (user tokens — aud=nova-api)
 builder.AddNovaJwt();
 
-// 6. Data access
+// 5b. Internal service-to-service authentication (InternalJwt scheme — aud=nova-internal)
+builder.AddNovaInternalAuth();
+
+// 6. JSON serialisation (snake_case wire format — all responses and request binding)
+builder.Services.AddNovaJsonOptions();
+
+// 7. API versioning (URL segment: /api/v{n}/resource)
+builder.Services.AddNovaApiVersioning();
+
+// 8. Data access
 builder.Services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
 builder.Services.AddHttpContextAccessor();
 
-// 7. Health checks
+// 9. Problem Details (RFC 9457 error responses)
+builder.Services.AddNovaProblemDetails();
+
+// 10. Outbound HTTP clients (resilient: retry, circuit breaker, timeouts + correlation ID forwarding)
+builder.Services.AddNovaHttpClient("nova-shell",
+    builder.Configuration["Services:NovaShell:BaseUrl"] ?? "http://localhost:5100");
+
+// 10b. Internal HTTP client — same as above but attaches InternalJwt Bearer token automatically
+builder.Services.AddNovaInternalHttpClient("nova-shell-internal",
+    builder.Configuration["Services:NovaShell:BaseUrl"] ?? "http://localhost:5100");
+
+// 11. Per-tenant rate limiting (fixed window, partitioned by tenant_id claim or IP for anonymous)
+builder.Services.AddNovaRateLimiting();
+
+// 12. Redis — IConnectionMultiplexer (Aspire injects connection string; standalone uses ConnectionStrings:redis)
+builder.AddRedisClient("redis");
+
+// 13. Cache service (ICacheService → RedisCacheService; profiles configured in opsettings.json → Caching)
+builder.Services.AddNovaCaching();
+
+// 14. Distributed locking (IDistributedLockService → RedisDistributedLockService; SET NX + Lua release)
+builder.Services.AddNovaDistributedLocking();
+
+// 16. Database migrations (DbUp — per-tenant, safe scripts auto-run, destructive scripts blocked + logged)
+builder.AddNovaMigrations();
+
+// 17. Outbox relay (polls nova_outbox per tenant, publishes to RabbitMQ or Redis Streams)
+builder.AddNovaOutboxRelay();
+
+// 15. Health checks
+// Redis health check is registered automatically by AddRedisClient above.
+// DB health is per-tenant via GET /health/db/{tenantId}.
 builder.Services
     .AddHealthChecks()
-    .AddCheck<MsSqlHealthCheck>("mssql", tags: ["mssql", "db"])
-    .AddCheck<PostgresHealthCheck>("postgres", tags: ["postgres", "db"])
-    .AddCheck<MariaDbHealthCheck>("mariadb", tags: ["mariadb", "db"]);
+    .AddCheck<RabbitMqHealthCheck>("rabbitmq", tags: ["rabbitmq"]);
 
 WebApplication app = builder.Build();
+
+// Shared API version set — declares v1 exists and opts into api-supported-versions headers.
+var novaVersionSet = app.NewApiVersionSet("Nova")
+    .HasApiVersion(new ApiVersion(1, 0))
+    .ReportApiVersions()
+    .Build();
+
+// Versioned route group: all business API endpoints are registered under this prefix.
+// Each endpoint Map() call uses the group, not the app directly.
+RouteGroupBuilder v1 = app.MapGroup("/api/v{version:apiVersion}")
+    .WithApiVersionSet(novaVersionSet)
+    .MapToApiVersion(new ApiVersion(1, 0))
+    .RequireRateLimiting(RateLimitingExtensions.PolicyName);  // applies to all business endpoints
 
 // Validate tenant registry and optionally print diagnostic connections
 TenantRegistry tenantRegistry = app.Services.GetRequiredService<TenantRegistry>();
@@ -63,89 +124,65 @@ if (consoleMode) Console.WriteLine($"[Tenancy] Tenant registry loaded. Tenants: 
 // Connectivity pings in console mode
 if (consoleMode)
 {
-    AppSettings appSettings = app.Services.GetRequiredService<IOptions<AppSettings>>().Value;
-    OpsSettings opsSettings = app.Services.GetRequiredService<IOptionsMonitor<OpsSettings>>().CurrentValue;
-    IDbConnectionFactory factory = app.Services.GetRequiredService<IDbConnectionFactory>();
+    AppSettings          appSettings = app.Services.GetRequiredService<IOptions<AppSettings>>().Value;
+    IDbConnectionFactory factory     = app.Services.GetRequiredService<IDbConnectionFactory>();
 
-    if (opsSettings.HealthChecks.DisableMsSql)
+    foreach (var (entry, dbType, label) in new[]
     {
-        Console.WriteLine("[MSSQL] Connectivity check skipped (disabled via opsettings).");
-    }
-    else
+        (appSettings.DiagnosticConnections.MsSql,    NovaDbType.MsSql,    "MSSQL"),
+        (appSettings.DiagnosticConnections.Postgres, NovaDbType.Postgres, "Postgres"),
+        (appSettings.DiagnosticConnections.MariaDb,  NovaDbType.MariaDb,  "MariaDB"),
+    })
     {
+        if (!entry.Enabled) { Console.WriteLine($"[{label}] Ping skipped (Enabled: false in appsettings)."); continue; }
         try
         {
-            using IDbConnection msSqlConn = factory.CreateFromConnectionString(appSettings.DiagnosticConnections.MsSql, NovaDbType.MsSql);
-            int mssqlResult = msSqlConn.ExecuteScalar<int>("SELECT 1");
-            Console.WriteLine($"[MSSQL] Connectivity OK (result: {mssqlResult})");
+            using IDbConnection conn = factory.CreateFromConnectionString(entry.ConnectionString, dbType);
+            int result = conn.ExecuteScalar<int>("SELECT 1");
+            Console.WriteLine($"[{label}] Connectivity OK (result: {result})");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MSSQL] Connectivity FAILED: {ex.Message}");
-        }
-    }
-
-    if (opsSettings.HealthChecks.DisablePostgres)
-    {
-        Console.WriteLine("[Postgres] Connectivity check skipped (disabled via opsettings).");
-    }
-    else
-    {
-        try
-        {
-            using IDbConnection pgConn = factory.CreateFromConnectionString(appSettings.DiagnosticConnections.Postgres, NovaDbType.Postgres);
-            int pgResult = pgConn.ExecuteScalar<int>("SELECT 1");
-            Console.WriteLine($"[Postgres] Connectivity OK (result: {pgResult})");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[Postgres] Connectivity FAILED: {ex.Message}");
-        }
-    }
-
-    if (opsSettings.HealthChecks.DisableMariaDb)
-    {
-        Console.WriteLine("[MariaDB] Connectivity check skipped (disabled via opsettings).");
-    }
-    else
-    {
-        try
-        {
-            using IDbConnection mariaDbConn = factory.CreateFromConnectionString(appSettings.DiagnosticConnections.MariaDb, NovaDbType.MariaDb);
-            int mariaDbResult = mariaDbConn.ExecuteScalar<int>("SELECT 1");
-            Console.WriteLine($"[MariaDB] Connectivity OK (result: {mariaDbResult})");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[MariaDB] Connectivity FAILED: {ex.Message}");
+            Console.WriteLine($"[{label}] Connectivity FAILED: {ex.Message}");
         }
     }
 }
 
 // Middleware pipeline
+app.UseNovaProblemDetails();  // must be first — catches all downstream exceptions
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseNovaRateLimiting();   // after auth — HttpContext.User is populated when partition key is evaluated
 app.UseMiddleware<TenantResolutionMiddleware>();
 
-// Endpoints
-HelloWorldEndpoint.Map(app);
+// Versioned API endpoints — registered on the v1 group (/api/v1/...)
+HelloWorldEndpoint.Map(v1);
+EchoEndpoint.Map(v1);           // reference: validation + Problem Details pattern
+EchoListEndpoint.Map(v1);       // reference: pagination contract pattern
+HttpPingEndpoint.Map(v1);       // reference: resilient outbound HttpClient pattern
+
+// Unversioned diagnostic endpoints — registered directly on app (no version check applied)
 TestDbMsSqlEndpoint.Map(app);
 TestDbPostgresEndpoint.Map(app);
+TestCacheEndpoint.Map(app);
+TestLockEndpoint.Map(app);
+TestInternalAuthEndpoint.Map(app);
+
+// Admin endpoints — unversioned, unprotected in dev (add InternalService policy in production)
+RunMigrationsEndpoint.Map(app);
+TenantDbHealthEndpoint.Map(app);
 
 // Health check endpoints
 app.MapHealthChecks("/health");
-app.MapHealthChecks("/health/mssql", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+app.MapHealthChecks("/health/redis",    new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
-    Predicate = check => check.Tags.Contains("mssql")
+    Predicate = check => check.Name == "redis"
 });
-app.MapHealthChecks("/health/postgres", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+app.MapHealthChecks("/health/rabbitmq", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
-    Predicate = check => check.Tags.Contains("postgres")
+    Predicate = check => check.Tags.Contains("rabbitmq")
 });
-app.MapHealthChecks("/health/mariadb", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
-{
-    Predicate = check => check.Tags.Contains("mariadb")
-});
+// Per-tenant DB health: GET /health/db/{tenantId}
 
 app.Run();

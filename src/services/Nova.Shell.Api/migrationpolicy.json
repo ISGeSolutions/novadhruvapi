@@ -1,0 +1,36 @@
+{
+  "MigrationPolicy": {
+    "MsSql": [
+      "CREATE TABLE",
+      "CREATE INDEX",
+      "CREATE VIEW",
+      "ALTER TABLE ADD",
+      "ALTER TABLE SET",
+      "INSERT",
+      "UPDATE",
+      "DELETE",
+      "SELECT"
+    ],
+    "Postgres": [
+      "CREATE TABLE",
+      "CREATE INDEX",
+      "CREATE VIEW",
+      "ALTER TABLE ADD",
+      "ALTER TABLE SET",
+      "INSERT",
+      "UPDATE",
+      "DELETE",
+      "SELECT"
+    ],
+    "MariaDb": [
+      "CREATE TABLE",
+      "CREATE INDEX",
+      "CREATE VIEW",
+      "ALTER TABLE ADD",
+      "INSERT",
+      "UPDATE",
+      "DELETE",
+      "SELECT"
+    ]
+  }
+}

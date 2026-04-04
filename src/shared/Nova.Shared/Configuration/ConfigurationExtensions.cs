@@ -15,9 +15,10 @@ public static class ConfigurationExtensions
     public static IHostApplicationBuilder AddNovaConfiguration(this IHostApplicationBuilder builder)
     {
         builder.Configuration
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+            .AddJsonFile("appsettings.json",    optional: false, reloadOnChange: false)
             .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: false)
-            .AddJsonFile("opsettings.json", optional: false, reloadOnChange: true)
+            .AddJsonFile("opsettings.json",     optional: false, reloadOnChange: true)
+            .AddJsonFile("migrationpolicy.json", optional: false, reloadOnChange: false)
             .AddEnvironmentVariables();
 
         builder.Services.Configure<AppSettings>(builder.Configuration);

@@ -18,5 +18,11 @@ public sealed class PostgresDialect : ISqlDialect
     public string BooleanLiteral(bool value) => value ? "true" : "false";
 
     /// <inheritdoc />
+    public string ActiveRowsFilter() => "frz_ind = false";
+
+    /// <inheritdoc />
+    public string SoftDeleteClause() => "frz_ind = true";
+
+    /// <inheritdoc />
     public string ParameterPrefix => "@";
 }

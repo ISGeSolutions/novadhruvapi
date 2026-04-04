@@ -2,6 +2,13 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Nova AppHost (Aspire)",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/src/host/Nova.AppHost/Nova.AppHost.csproj",
+      "launchSettingsProfile": "http"
+    },
+    {
       "name": "Nova.Shell.Api (HTTP)",
       "type": "dotnet",
       "request": "launch",

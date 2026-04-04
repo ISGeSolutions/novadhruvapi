@@ -1,0 +1,286 @@
+Generate a detailed description of JSON request/response structures for all endpoints below, suitable for building a Postman collection and mock server. Do not generate C# or any other implementation code — the API contract only.
+
+
+All our project rules/design are there in planning/ainotes/ folder.
+
+Our approach is:
+1. Create JSON structure of Request/Response, that we can import into Postman. Request/Response to have data with different return HTTP codes. 
+2. It is then converted to Mock Server.
+3. UX team (React), can then start using the API.
+4. The Postman JSON prompt is then used to create the dotnet API service using AI (in this case src/services/Nova.ToDo.Api)
+
+All the rules agreed to date are in planning/ainotes/ folder. e.g. JSON should follow snake case.
+
+I am extending the NovaDhruv project to write a new API service for ToDo, in this case src/services/Nova.ToDo.Api) (Task list).
+It will be a CRUD and lists of the ToDos.
+
+This is my table structure:
+CREATE TABLE sales97.dbo.ToDo (
+	SeqNo int IDENTITY(1,1) NOT NULL,  --(1)
+	JobCode nvarchar(4) NOT NULL, --(WH) Mandatory. ToDo Job Code
+	TaskDetail nvarchar(255) NOT NULL, --(Welcome home call) Mandatory. ToDo task detail
+	AssignedToUserCode nvarchar(10) NOT NULL, --(JOEB) Mandatory. Assigned to user code
+	PriorityCode nvarchar(2) NOT NULL, --(N) Mandatory. e.g. H - High, N - Normal, L - Low
+	DueDate datetime NOT NULL, --(2026-10-01) Mandatory. Date on which task is due
+	DueTime datetime, --(10:30) Required only for time-sensitive tasks
+	InFlexibleInd bit DEFAULT ((0)) NOT NULL, --(0) Optional. When job has to completed on due date
+	StartDate datetime, --(yyyy-mm-dd) optional, task start date (rarely used)
+	StartTime datetime, --(HH:mm) optional, task start time (rarely used)
+	AssignedByUserCode nvarchar(10) NOT NULL, --(JaneB) Mandatory. User who assigned the task
+	AssignedOn datetime, --(yyyy-MM-ddThh:mm:ssZ) the date task was assigned on
+	Remark nvarchar(max), --any optional comments/notes to go with
+	EstJobTime datetime, --(HH:mm) standard time required to do the job in hours:mins
+
+	ClientName nvarchar(60), --used only when caller is not our CRM database
+	BkgNo int, --(500310) Booking No (if linked to a booking)
+	QuoteNo int, --(100234) Quote No (if linked to Enquiry or Quote - as EnquiryNo and QuoteNo is always same)
+	CampaignCode nvarchar(16), --(FACEBOOK) if linked to Marketing source 
+	Accountcode_Client nvarchar(10), --(0000123456) if linked to client in CRM. Note leading zeros should remain.
+	Brochure_Code_Short nvarchar(10), --(EXP2026) Also known as TourSeriesCode. if linked to a group tour. Then this (TourSeriesCode) is required and DepDate
+	DepDate datetime, --(2026-12-15) if linked to a group tour. Then this is required and Brochure_Code_Short (TourSeriesCode)
+	SupplierCode nvarchar(10), --(0000000001) if linked to a supplier, note leading zeroes are important to retain.
+
+	SendEMailToInd bit DEFAULT ((0)) NOT NULL, --optional, if true is added to queue to send to email to user to whom task is assigned.
+	SentMailInd bit, --true, once email has been sent
+	AlertToInd bit DEFAULT ((0)) NOT NULL, --optional, if true is added to queue to send to notification/alert to user to whom task is assigned.
+	SendSMSInd bit DEFAULT ((0)) NOT NULL, --optional, if true is added to queue to send to SMS to user to whom task is assigned.
+	SendSMSTo nvarchar(20), --optional, mobile number to send SMS too. Mandatory if, SendSMSInd is true
+
+	--sources of task made, besides manual - when created as a result of some other activity. all optional
+	----these are used so that duplicate tasks are not created.
+	----in any one task, only of these 4 fields are expected
+	Travel_PNRNo nvarchar(25), --(XY2RP6) PNR No, when task is created due to information added to a PNR
+	SeqNo_Charges int, --SeqNo of Charges table, the table in which records are added when online payments are done
+	SeqNo_AcctNotes int, --SeqNo of AcctNotes (AccountNotes/ClientNotes in CRM)
+	Itinerary_No int, --(90000345) Itinerary No, when linked to a holiday itinerary.
+
+	DoneInd bit DEFAULT ((0)) NOT NULL, --true when job is completed
+	DoneBy nvarchar(10), --(JOEB) job done by user code
+	DoneOn datetime, --job done on date+time
+
+	FrzInd bit DEFAULT ((0)), --soft delete. then it does not show up on lists.
+	CreatedBy nvarchar(10) NOT NULL, --(JANEB), 
+	CreatedOn datetime NOT NULL,
+	UpdatedBy nvarchar(10) NOT NULL, --(JOEB)
+	UpdatedOn datetime NOT NULL,
+	UpdatedAt nvarchar(20) NOT NULL, --ip address of UX system calling the API
+
+	constraint PK_ToDo PRIMARY KEY (SeqNo)
+);
+--validations
+JobCode: exist in: select * from sales97.dbo.jobs where code = @JobCode
+AssignedToUserCode, AssignedByUserCode, DoneBy: exists in: select * from sales97.dbo.users where code = @UserCode
+PriorityCode: exists in: select * from sales97.dbo.Priority where code = @PriorityCode
+BkgNo: exists in: select * from fit.dbo.bookingdetail where bkgno = @BkgNo
+QuoteNo: exists in: select * from fit.dbo.fitquote where bkgno = @QuoteNo
+CampaignCode: exists in: select * from sales97.dbo.products where ProductCode = @CampaignCode
+Accountcode_Client: exists in: select * from sales97.dbo.accountmast where accountcode = @Accountcode_Client
+Brochure_Code_Short: exists in: select * from brochure.dbo.brochure where Brochure_Code_Short = @Brochure_Code_Short
+DepDate: exists in: select * from brochure.dbo.validdates where Brochure_Code_Short = @Brochure_Code_Short and validdate = @DepDate
+SupplierCode: select * from sales97.dbo.accountmast where accountcode = @SupplierCode (Clients, Suppliers, Travel Agents are all in same table, identified by AccountType: IN, SU, TA)
+Travel_PNRNo: exists in: select * from fit.dbo.TravelPNRDeadline where GDSRecordLocator = @Travel_PNRNo
+SeqNo_Charges: exist in: select * from fit.dbo.charges where SeqNo = @SeqNo_Charges
+Itinerary_No: exists in: select * from fit.dbo.bkgitinerary where BkgNo = @Itinerary_No (BkgNo is not a typo - but unfortunately in some tables BkgNo has value of Itinerary_No/ItineraryNo)
+
+Note: Insert updates all field CreatedBy/CreatedOn/UpdatedBy/UpdatedOn/UpdatedAt
+
+Name anamolies, due to legacy database:
+- SeqNo → seq_no (straightforward)
+- Accountcode_Client → account_code_client
+- Brochure_Code_Short — the prompt uses both this name and TourSeriesCode. In the JSON please use tour_series_code.
+
+Gets as pre-edit will be by:
+1. SeqNo
+2. BkgNo, JobCode, DoneInd = 0
+3. QuoteNo, JobCode, DoneInd = 0
+4. Brochure_Code_Short, DepDate, JobCode, DoneInd = 0
+Separate routes POST /api/v1/todos/by-seq-no, POST /api/v1/todos/by-booking, POST /api/v1/todos/by-quote, POST /api/v1/todos/by-tourseries-departure, POST /api/v1/todos/by-task-source
+5. Any of the task-source value with DoneInd = 0 (one route — POST /api/v1/todos/by-task-source). Exactly one filter field populated, return 400 otherwise
+
+Above are needed for the full detail view (pre-edit). Do note, that the request object to insert/update, may have only JSON values to be updated and above data to uniquely identify the task.
+
+Authorisation would be by passing JWT Token as bearer token in HTTP header.
+The src/shared/Nova.Shared has the full implementation of shared services like authorisation, logging, others.
+
+EstJobTime field — stored as datetime in SQL but represents a duration (HH:MM). This is a quirk — the JSON should carry it as a string "HH:MM" (valid time string) and the API layer will convert to datetime.
+
+Task-source fields after insert — confirm these are immutable (no update allowed).
+Note there can be multiple ToDos for same value of Task-source, but only one with DoneInd = 0. If a record already exists with DoneInd = 0, then same record is updated. Note the only difference is that Remark gets appended to existing remark (if the remark content in API does not already exists in remark in DB anywhere)
+
+When a caller POSTs to Create and an existing open record is found for that task source:
+- if the 'remark', already is contained in the 'remark' column of DB, it returns 204 with no body
+- if the 'remark', is not contained in the 'remark' column of DB, it returns 201 (with the remark appended to 'remark-in-db' + '; ' + 'remark-in-json'). It return the existing seq_no so the caller knows it was an upsert.
+- if the 'remark' is empty, update any differing non-task-source fields and return 200 with seq_no.
+The todo does not exist, and record is created, return 201 with seq_no in the body.
+
+If the caller also sends fields that differ from the existing record beyond Remark — those are updated too (due date could change or assignedtouser could change are good examples)
+
+
+For lists:
+User should be able to extract list by:
+1. AssignedToUserCode, DoneInd yes or no or both, DueDate range
+2. TourSeriesCode, DepDate (departure date/valid date range), DoneInd yes or no or both, DueDate range
+3. BkgNo, DoneInd yes or no or both
+4. QuoteNo, DoneInd yes or no or both
+5. CampaignCode, DoneInd yes or no or both
+6. Accountcode_Client, DoneInd yes or no or both, DueDate range
+7. SupplierCode, DoneInd yes or no or both, DueDate range
+e.g. POST /api/v1/todos/list/by-assignee, POST /api/v1/todos/list/by-tourseries-departure, POST /api/v1/todos/list/by-booking, POST /api/v1/todos/list/by-quote, POST /api/v1/todos/list/by-campaign, POST /api/v1/todos/list/by-client, POST /api/v1/todos/list/by-supplier
+8. List by task-source, DoneInd yes or no or both, DueDate range (one route — POST /api/v1/todos/list/by-task-source).Named optional filter fields, exactly one group populated, return 400 otherwise.
+
+List response shape: summary subset:
+SeqNo, PriorityCode, StartDate, DueDate, AssignedToUserCode, TaskDetail, Remark, CreatedBy, CreatedOn, UpdatedBy, UpdatedOn, SendSMSInd, SendSMSTo, SentMailInd, DoneInd, Accountcode_Client, BkgNo, QuoteNo, FrzInd
+To save from DB turn-around: these columns need to also have code's name/description.
+PriorityName, AssignedToUserName, CreatedByName, UpdatedByName, 
+ClientName (from AccountCode), TourCode (from BkgNo/QuoteNo), ItineraryName (from BkgNo/QuoteNo)
+
+Please use inline query. Remember we are doing for MSSQL, Postgres and MariaDB/MySql. Put a place holder and I can write the actual query.
+
+Lists should support Pagination. Add page_no + page_size to all list requests now. API will fetch page_size + 1 record, and accordingly set the has_next_page. And it will discard the last record, if page_size+1 record is returned. has_next_page is returned in the response.
+
+Aggregates end-points required:
+1. For a given assignedtousercode (v1/todos/summary/by-user: assigned_to_user_code (mandatory)), get total count of 
+   --tasks due today, split by priority, nested (doneind = 0) 
+   --Overdue tasks, split by priority, nested (doneind = 0)
+   --WIP tasks (doneind = 0),  Tasks with a start_date set and doneind = 0
+   --tasks due today and created on is today (doneind = 0)
+   --completed tasks today (doneind = 1)
+Receives the auto-injected context fields.
+
+2. For a given bookingno, quoteno, accountcode_client, suppliercode, tourseriescode+depdate, one endpoint (v1/todos/summary/by-context: named optional filter fields — exactly one of booking_no, quote_no, account_code_client,
+  supplier_code, or tour_series_code + dep_date), total count of
+   --tasks due today, split by priority, nested (doneind = 0)
+   --Overdue tasks, split by priority, nested (doneind = 0)
+   --WIP tasks (doneind = 0),  Tasks with a start_date set and doneind = 0
+   --tasks due today and created on also today (doneind = 0)
+   --completed tasks (doneind = 1) (all time). 
+   For booking_no, quote_no, and tour_series_code + dep_date, it will be all completed tasks.
+   Accountcode_client, suppliercode, will need a more nuanced approach and best for me to amend the inline query (e.g. for client it will be completed count for all open enquiry, open quotes, bookings till 15+return date; for suppliers it will be since last 30days-in both case 15/30 could come from config file.)
+   Named optional filter fields, exactly one group populated, return 400 otherwise.
+
+Receives the auto-injected context fields.
+
+Aggregate queries exclude frozen records (frz_ind = 0).
+
+Aggregate dates — today will be by tenant timezone. Based on browser time-zone, calculate UTC from/to datetime and then use that to filter the todo records.
+
+All mutation endpoints return 200 success, 404 not found, 409 concurrency conflict unless stated otherwise.
+
+Define the request/response structure for Create, Update, Delete.
+We have one more operation Freeze/UnFreeze: which essentially is an update to FrzInd (Updated by fields are also updated)
+Note for update, do not expect all columns, only the column that is amended and primary key.
+Note: we still need a hard delete 
+An end point is needed when job is done/completed. Caller must explicitly send done_by. done_on is server set. Concurrency check is required for any update, delete, including freeze, un-freeze and completed. Reverse operation: un-completed is needed.
+Hard Delete — POST /api/v1/todos/{seq_no}/delete. updated_on must be in the POST body. Return 200 success, 404 not found, 409 concurrency conflict.
+Freeze/UnFreeze — POST /api/v1/todos/{seq_no}/freeze (one route for both). Request body: frz_ind (boolean — true to freeze, false to unfreeze), plus updated_on for concurrency.
+Complete/UndoComplete — With UndoComplete, DoneBy and DoneOn are made null value. Two routes — POST /api/v1/todos/{seq_no}/complete and POST /api/v1/todos/{seq_no}/undo-complete.
+- Complete: done_by + updated_on for concurrency
+- UndoComplete: updated_on for concurrency (no domain fields)
+
+If Freeze is called with frz_ind: true on a record already frozen, or Complete is called on a record already done — the API return 422 with a message.
+
+Pre-edit Get endpoints do not filter on frz_ind — they return the record regardless of frozen state.
+All list queries filter frz_ind = 0 by default. An optional include_frozen boolean (default false) in the request body removes this filter when true. Rights-controlled.
+
+User with rights access. When generating code, we will have place-holder to check if user has rights to CRUD, freeze or completed or list operations.
+
+Note the request will always have tenant_id, company_id, branch_id. These are used to log the source of requests and access to Booking (BkgNo), Enquiry or Quote (QuoteNo), AccountCode_Client: as these belong to specific tenant_id, company_id and branch_id.
+
+For all mutation operations:
+a. updated_on is required on all mutations and that conflict behaviour is controlled by opsettings.json ConcurrencyCheck.StrictMode.  
+b. In the update JSON, user should also give the updatedon value as when the record was retrieved. If ConcurrencyCheck.StrictMode is true in opsettings.json, and the updated_on in DB is later than the value sent, return 409 with message: record was updated between your read and update. Refresh data..
+
+When mandatory field validation fails (e.g. job_code not found in the jobs table, priority_code invalid):
+400 for missing or malformed required fields; 422 for fields present but failing business/lookup validation.
+List the malformed required fields, fields failing business validations in the response.
+
+Favour separate endpoints over single-end point.
+
+Port number for Nova.ToDo.Api: 5101
+
+e.g. of sample data including data from joins. The sample data for the columns are there in table defintion in (brackets).
+Use this to setup Mock server:
+PriorityName: Normal
+AssignedToUserName: Joe Blog, 
+CreatedByName: Jane Blog 
+UpdatedByName: Jane Blog
+ClientName (from AccountCode): Sunil Gavaskar
+TourCode (from BkgNo/QuoteNo): EXP2026
+ItineraryName (from BkgNo/QuoteNo): Indian Experience
+
+e.g. of aggregate data:
+for aggregate data, generate random numbers from 0 to 25, for mock server.
+
+API Standards and Conventions:
+**Base URL**
+All endpoints are versioned and served under /api/v{n}/. The default version for each endpoint is defined in the static registry (src/services/apiNovaDhruvUxConfig.ts). Tenant-specific overrides may point individual endpoints to different versions.
+
+**Wire Format — snake_case**
+All JSON request and response bodies use snake_case key names on the wire (e.g., tenant_id, page_size, booking_no).
+
+The frontend uses camelCase internally. A transform layer in apiClient (src/services/apiNovaDhruvUxConfig.ts) automatically converts:
+
+Outgoing request bodies: camelCase → snake_case (via toSnakeCase)
+Incoming response bodies: snake_case → camelCase (via toCamelCase)
+Service files, components, and TypeScript interfaces never deal with snake_case directly. The examples below show the wire format (snake_case).
+
+**Authentication**
+All requests require a JWT Bearer token obtained via the auth endpoint.
+
+**Obtain Token**
+Method	POST
+Path	/api/v1/auth/token
+Body	{ "tenant_id": "T001", "shared_password": "..." }
+Response	{ "token": "eyJhbG...", "expires_in": 3600 }
+The shared_password is a per-tenant secret that authenticates the application instance to the API layer.
+
+Once obtained, the token is sent on every subsequent request as:
+
+Authorization: Bearer <token>
+Note: The auth endpoint does not receive auto-injected context fields — it runs before context is established.
+Note: Authorisation is handled by shared project.
+
+**HTTP Method Convention**
+All data-retrieval endpoints use POST (not GET). Request parameters are passed in the JSON body rather than as URL query strings. This keeps sensitive filters out of URLs, server logs, and browser history.
+
+PATCH  (PATCH /api/v1/todos/{seq_no}) is retained for partial-update operations (e.g., saving records, saving booking client details).
+In an update operation, do a get and if data is same as being updated, ignore (do not do the update)
+
+- 200 — success. body has seq_no, updated_on
+- 204 — no-op when submitted data is identical to DB 
+- 404 — record not found
+- 409 — concurrency conflict
+
+Standard Context Fields (Auto-Injected)
+Every request body routed through apiClient in src/services/apiNovaDhruvUxConfig.ts is automatically enriched with two context objects. These fields appear in every POST/PATCH request and must not be specified manually by service files.
+
+**API Context (from tenant configuration)**
+Field	Type	Description
+tenant_id	string	Current tenant identifier
+company_id	string	Current company identifier
+branch_id	string	Current branch identifier
+user_id	string	Current user identifier
+
+**Client Context (captured on startup)**
+Field	Type	Description
+browser_locale	string	navigator.language (e.g., "en-GB")
+browser_timezone	string	IANA timezone (e.g., "Europe/London")
+ip_address	string | null	Client IP from ipify.org (fallback null). Server should also read X-Forwarded-For as a more reliable complement.
+In the endpoint examples below, these 7 fields are shown with the comment // ← auto-injected to indicate they are added automatically by apiClient.
+
+**Tenant-Specific Versioning**
+The endpoint registry supports per-tenant overrides. When a tenant requires a different API version for a specific endpoint, it is configured in TENANT_OVERRIDES in src/services/apiNovaDhruvUxConfig.ts. The getEndpoint(key, tenantId?) function resolves the correct URL.
+
+Example: If tenant T002 uses v2 for client-records, calls for that tenant resolve to /api/v2/client-records instead of /api/v1/client-records.
+
+**Naming Conventions**
+
+***API Endpoints***
+Kebab-case, plural nouns: /api/v1/todos, /api/v1/booking-rows
+Domain-prefixed: use todo-records not records, booking-rows not rows — avoids ambiguity as the API grows
+Sub-resources via path nesting: /api/v1 bookings/{booking_no}/passengers/{passenger_id}
+Version prefix: /api/v{n}/ — version is per-endpoint, resolved by getEndpoint()
+
+***JSON Keys***
+Wire format: snake_case for all JSON request and response bodies (e.g., tenant_id, page_size, booking_no)
+

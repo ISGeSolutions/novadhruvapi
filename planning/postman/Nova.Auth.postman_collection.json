@@ -1,0 +1,261 @@
+{
+  "info": {
+    "name": "Nova — Auth (Dev Token Generator)",
+    "description": "Dev-only tooling for generating JWT bearer tokens to use with Nova API services in Postman.\n\n---\n\nSetup (one time per developer)\n\n  1. Create a Postman environment called 'Nova Local Dev'.\n  2. Add the following environment variables:\n       jwt_secret        The plaintext JWT secret (decrypt appsettings.json Jwt.SecretKey with your ENCRYPTION_KEY)\n       tenant_id         Tenant to impersonate, e.g. BLDK\n       company_id        Company within that tenant, e.g. BLDK-MAIN\n       branch_id         Branch, e.g. BLDK-LON\n       user_id           Dev user identifier, e.g. dev-user-001\n  3. Select the 'Nova Local Dev' environment in the top-right dropdown.\n  4. Run '1. Generate Dev JWT' — the access_token variable is set automatically.\n  5. In Nova.Shell.Api requests that need auth, set Authorization → Bearer Token → {{access_token}}.\n\n---\n\nImportant: the jwt_secret must be the plaintext secret — not the encrypted value from appsettings.json.\nNever commit your plaintext jwt_secret to source control.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "jwt_issuer",
+      "value": "https://auth.nova.internal",
+      "type": "string",
+      "description": "Must match Jwt.Issuer in appsettings.json."
+    },
+    {
+      "key": "jwt_audience",
+      "value": "nova-api",
+      "type": "string",
+      "description": "Must match Jwt.Audience in appsettings.json."
+    },
+    {
+      "key": "shell_base_url",
+      "value": "http://localhost:5100",
+      "type": "string",
+      "description": "Nova.Shell.Api listen address. Used to verify the generated token works."
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Generate Dev JWT",
+      "description": "Generates a signed JWT from your environment variables and stores it as access_token. Run this first before making authenticated requests to any Nova API service.\n\nRequired environment variables (set in 'Nova Local Dev' environment):\n  jwt_secret    — plaintext JWT secret (decrypt from appsettings.json using ENCRYPTION_KEY)\n  tenant_id     — e.g. BLDK\n  company_id    — e.g. BLDK-MAIN\n  branch_id     — e.g. BLDK-LON\n  user_id       — e.g. dev-user-001\n\nAfter running: access_token is set in your environment. The request itself hits GET /api/v1/hello-world on the Shell API to confirm the token is accepted.",
+      "item": [
+        {
+          "name": "Generate Dev JWT + Verify",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// -----------------------------------------------------------------------",
+                  "// Nova Dev JWT Generator",
+                  "// Generates a HS256-signed JWT and stores it as access_token.",
+                  "// All values come from Postman environment variables.",
+                  "// -----------------------------------------------------------------------",
+                  "",
+                  "const base64url = (obj) =>",
+                  "    CryptoJS.enc.Base64",
+                  "        .stringify(CryptoJS.enc.Utf8.parse(JSON.stringify(obj)))",
+                  "        .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
+                  "",
+                  "// pm.variables.get() searches all scopes: environment → collection → globals.",
+                  "// This means jwt_secret / tenant_id etc. can live in any scope — no environment required.",
+                  "const required = ['jwt_secret', 'tenant_id', 'company_id', 'branch_id', 'user_id'];",
+                  "for (const key of required) {",
+                  "    if (!pm.variables.get(key)) {",
+                  "        throw new Error(`Missing variable: ${key}. Add it to your active environment, collection variables, or Postman globals.`);",
+                  "    }",
+                  "}",
+                  "",
+                  "const now = Math.floor(Date.now() / 1000);",
+                  "",
+                  "const header = base64url({ alg: 'HS256', typ: 'JWT' });",
+                  "",
+                  "const payload = base64url({",
+                  "    iss:        pm.variables.get('jwt_issuer'),",
+                  "    aud:        pm.variables.get('jwt_audience'),",
+                  "    sub:        pm.variables.get('user_id'),",
+                  "    tenant_id:  pm.variables.get('tenant_id'),",
+                  "    company_id: pm.variables.get('company_id'),",
+                  "    branch_id:  pm.variables.get('branch_id'),",
+                  "    user_id:    pm.variables.get('user_id'),",
+                  "    iat: now,",
+                  "    exp: now + 3600",
+                  "});",
+                  "",
+                  "const signingInput = header + '.' + payload;",
+                  "const secret      = pm.variables.get('jwt_secret');",
+                  "const rawSig      = CryptoJS.HmacSHA256(signingInput, secret);",
+                  "const signature   = CryptoJS.enc.Base64.stringify(rawSig)",
+                  "    .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
+                  "",
+                  "const token = signingInput + '.' + signature;",
+                  "// Store access_token wherever variables are writable.",
+                  "// If an environment is active it goes there; otherwise falls back to globals.",
+                  "try { pm.environment.set('access_token', token); } catch(_) {}",
+                  "pm.globals.set('access_token', token);",
+                  "",
+                  "console.log('access_token generated.');",
+                  "console.log('  tenant_id: ' + pm.variables.get('tenant_id'));",
+                  "console.log('  user_id:   ' + pm.variables.get('user_id'));",
+                  "console.log('  expires:   ' + new Date((now + 3600) * 1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('access_token was generated and stored', () => {",
+                  "    const token = pm.variables.get('access_token');",
+                  "    pm.expect(token).to.be.a('string').and.match(/^[\\w-]+\\.[\\w-]+\\.[\\w-]+$/);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Shell API accepted the token (200 OK)', () => {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "} else if (pm.response.code === 401) {",
+                  "    console.warn('Shell API returned 401 — check jwt_secret matches appsettings.json Jwt.SecretKey (decrypted).');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "description": "Set by the pre-request script above."
+              }
+            ],
+            "url": {
+              "raw": "{{shell_base_url}}/api/v1/hello-world",
+              "host": ["{{shell_base_url}}"],
+              "path": ["api", "v1", "hello-world"]
+            },
+            "description": "Hits GET /api/v1/hello-world on the Shell API to confirm the generated token is accepted. A 200 means the token is valid. A 401 means jwt_secret is wrong."
+          },
+          "response": [
+            {
+              "name": "200 OK — Token accepted",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Correlation-ID", "value": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
+              ],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+                "url": {
+                  "raw": "{{shell_base_url}}/api/v1/hello-world",
+                  "host": ["{{shell_base_url}}"],
+                  "path": ["api", "v1", "hello-world"]
+                }
+              },
+              "body": "{\n  \"message\": \"Hello, World!\",\n  \"timestamp\": \"2026-04-03T10:00:00+00:00\",\n  \"correlation_id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\"\n}"
+            },
+            {
+              "name": "401 Unauthorised — Wrong secret",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/problem+json" }
+              ],
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+                "url": {
+                  "raw": "{{shell_base_url}}/api/v1/hello-world",
+                  "host": ["{{shell_base_url}}"],
+                  "path": ["api", "v1", "hello-world"]
+                }
+              },
+              "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Auth Service (Placeholder)",
+      "description": "Placeholder folder for when Nova.Auth.Api is built.\nEndpoints below are not yet implemented — they show the intended contract.\nIssuer will be https://auth.nova.internal (as configured in appsettings.json Jwt.Issuer).",
+      "item": [
+        {
+          "name": "POST /auth/token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"dev-user-001\",\n  \"password\": \"{{user_password}}\",\n  \"tenant_id\": \"{{tenant_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{auth_base_url}}/auth/token",
+              "host": ["{{auth_base_url}}"],
+              "path": ["auth", "token"]
+            },
+            "description": "NOT YET IMPLEMENTED — placeholder for Nova.Auth.Api.\n\nWhen built, this endpoint will issue a JWT. The test script below will store it as access_token automatically.\n\nEnvironment variables needed:\n  auth_base_url   — Nova.Auth.Api base URL\n  user_password   — credentials"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.environment.set('access_token', json.access_token);",
+                  "    console.log('access_token stored from /auth/token response.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 OK — Token issued",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"dev-user-001\",\n  \"password\": \"secret\",\n  \"tenant_id\": \"BLDK\"\n}"
+                },
+                "url": {
+                  "raw": "{{auth_base_url}}/auth/token",
+                  "host": ["{{auth_base_url}}"],
+                  "path": ["auth", "token"]
+                }
+              },
+              "body": "{\n  \"access_token\": \"eyJ...\",\n  \"token_type\": \"Bearer\",\n  \"expires_in\": 3600,\n  \"tenant_id\": \"BLDK\"\n}"
+            },
+            {
+              "name": "401 Unauthorised — Bad credentials",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/problem+json" }],
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"dev-user-001\",\n  \"password\": \"wrong\",\n  \"tenant_id\": \"BLDK\"\n}"
+                },
+                "url": {
+                  "raw": "{{auth_base_url}}/auth/token",
+                  "host": ["{{auth_base_url}}"],
+                  "path": ["auth", "token"]
+                }
+              },
+              "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Invalid username or password.\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

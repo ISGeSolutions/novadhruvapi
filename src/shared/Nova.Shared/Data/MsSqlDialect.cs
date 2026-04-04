@@ -18,5 +18,11 @@ public sealed class MsSqlDialect : ISqlDialect
     public string BooleanLiteral(bool value) => value ? "1" : "0";
 
     /// <inheritdoc />
+    public string ActiveRowsFilter() => "frz_ind = 0";
+
+    /// <inheritdoc />
+    public string SoftDeleteClause() => "frz_ind = 1";
+
+    /// <inheritdoc />
     public string ParameterPrefix => "@";
 }

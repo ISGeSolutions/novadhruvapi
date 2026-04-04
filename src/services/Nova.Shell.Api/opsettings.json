@@ -1,9 +1,4 @@
 {
-  "HealthChecks": {
-    "DisableMsSql": false,
-    "DisablePostgres": true,
-    "DisableMariaDb": true
-  },
   "Logging": {
     "DefaultLevel": "Information",
     "EnableRequestResponseLogging": false,
@@ -12,6 +7,17 @@
       { "Name": "PeakMorning",     "Start": "07:00", "End": "10:00", "Level": "Warning" },
       { "Name": "DiagnosticNight", "Start": "22:00", "End": "02:00", "Level": "Debug"   }
     ]
+  },
+  "RateLimiting": {
+    "Enabled": true,
+    "PermitLimit": 100,
+    "WindowSeconds": 60,
+    "QueueLimit": 0
+  },
+  "OutboxRelay": {
+    "Enabled": true,
+    "PollingIntervalSeconds": 5,
+    "BatchSize": 50
   },
   "Caching": {
     "GloballyEnabled": true,

@@ -32,6 +32,15 @@ public sealed class OpsSettingsValidator : IValidateOptions<OpsSettings>
                 errors.Add($"Logging window '{window.Name}': Level '{window.Level}' is not valid.");
         }
 
+        if (options.RateLimiting.PermitLimit < 1)
+            errors.Add($"RateLimiting.PermitLimit must be >= 1 (got {options.RateLimiting.PermitLimit}).");
+
+        if (options.RateLimiting.WindowSeconds < 1)
+            errors.Add($"RateLimiting.WindowSeconds must be >= 1 (got {options.RateLimiting.WindowSeconds}).");
+
+        if (options.RateLimiting.QueueLimit < 0)
+            errors.Add($"RateLimiting.QueueLimit must be >= 0 (got {options.RateLimiting.QueueLimit}).");
+
         return errors.Count > 0
             ? ValidateOptionsResult.Fail(errors)
             : ValidateOptionsResult.Success;

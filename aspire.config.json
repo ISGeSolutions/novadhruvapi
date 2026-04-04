@@ -1,0 +1,5 @@
+{
+  "appHost": {
+    "path": "src/host/Nova.AppHost/Nova.AppHost.csproj"
+  }
+}

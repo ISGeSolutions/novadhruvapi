@@ -45,6 +45,17 @@ public sealed class DbConnectionFactory : IDbConnectionFactory
         return await OpenConnectionAsync(decryptedConnectionString, dbType, cancellationToken);
     }
 
+    /// <inheritdoc />
+    public IDbConnection OpenRaw(string rawConnectionString, DbType dbType) =>
+        OpenConnection(rawConnectionString, dbType);
+
+    /// <inheritdoc />
+    public Task<IDbConnection> OpenRawAsync(
+        string rawConnectionString,
+        DbType dbType,
+        CancellationToken cancellationToken = default) =>
+        OpenConnectionAsync(rawConnectionString, dbType, cancellationToken);
+
     private static IDbConnection OpenConnection(string decryptedConnectionString, DbType dbType)
     {
         IDbConnection connection = dbType switch

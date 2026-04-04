@@ -1,5 +1,8 @@
 <Solution>
   <Folder Name="/src/" />
+  <Folder Name="/src/host/">
+    <Project Path="src/host/Nova.AppHost/Nova.AppHost.csproj" />
+  </Folder>
   <Folder Name="/src/services/">
     <Project Path="src/services/Nova.Shell.Api/Nova.Shell.Api.csproj" />
   </Folder>

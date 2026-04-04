@@ -21,8 +21,11 @@ Repo root is the directory that contains `novadhruv.slnx`.
 - [ ] `src/shared/Nova.Shared/Nova.Shared.csproj` exists
 - [ ] `src/shared/Nova.Shared.Web/Nova.Shared.Web.csproj` exists
 - [ ] `src/services/Nova.Shell.Api/Nova.Shell.Api.csproj` exists
+- [ ] `src/host/Nova.AppHost/Nova.AppHost.csproj` exists
+- [ ] `aspire.config.json` exists at repo root (points to AppHost csproj)
 - [ ] `Nova.Shared.Web.csproj` references `Nova.Shared` via `<ProjectReference>`
 - [ ] `Nova.Shell.Api.csproj` references both `Nova.Shared` and `Nova.Shared.Web` via `<ProjectReference>` (not NuGet)
+- [ ] `Nova.AppHost.csproj` references `Nova.Shell.Api` via `<ProjectReference>` (no `IsAspireProjectResource` attribute needed)
 
 ---
 
@@ -77,6 +80,17 @@ Repo root is the directory that contains `novadhruv.slnx`.
 - [ ] ProjectReference to both `Nova.Shared.csproj` and `Nova.Shared.Web.csproj`
 - [ ] No direct package references to `Dapper`, `Microsoft.Data.SqlClient`, or `Npgsql` (inherited via project reference)
 - [ ] No reference to EF Core, MediatR, or AutoMapper
+
+### Nova.AppHost.csproj
+
+- [ ] Uses `Sdk="Aspire.AppHost.Sdk/<version>"` — NOT `Sdk="Microsoft.NET.Sdk"`
+- [ ] `<TargetFramework>net10.0</TargetFramework>`
+- [ ] `<Nullable>enable</Nullable>`
+- [ ] `<ImplicitUsings>enable</ImplicitUsings>`
+- [ ] `<RootNamespace>Nova.AppHost</RootNamespace>`
+- [ ] No `<IsAspireHost>true</IsAspireHost>` property — this is a deprecated workload-era flag
+- [ ] No `<PackageReference Include="Aspire.Hosting.AppHost" />` — handled by the SDK
+- [ ] ProjectReference to `Nova.Shell.Api.csproj` (plain reference, no `IsAspireProjectResource`)
 
 ---
 
@@ -149,9 +163,11 @@ Verify each file exists at the path shown (relative to `src/shared/Nova.Shared/`
 Verify each file exists at the path shown (relative to `src/shared/Nova.Shared.Web/`):
 
 - [ ] `Auth/JwtSetupExtensions.cs`
+- [ ] `Errors/ProblemDetailsSetupExtensions.cs`
 - [ ] `Middleware/CorrelationIdMiddleware.cs`
 - [ ] `Middleware/TenantResolutionMiddleware.cs`
 - [ ] `Observability/WebOtelExtensions.cs`
+- [ ] `Serialisation/JsonSetupExtensions.cs`
 - [ ] `Tenancy/TenancyExtensions.cs`
 
 ---
@@ -376,7 +392,9 @@ Verify the following are wired in this order:
 - [ ] `AddNovaTenancy` (from `Nova.Shared.Web`) — TenantRegistry + TenantContext DI
 - [ ] `AddNovaOpenTelemetry` (from `Nova.Shared`) — base OTel: runtime metrics, OTLP exporter, ActivitySource
 - [ ] `AddNovaWebInstrumentation` (from `Nova.Shared.Web`) — ASP.NET Core traces + metrics instrumentation
-- [ ] JWT authentication (`AddNovaJwt` from `Nova.Shared.Web`)
+- [ ] `AddNovaJwt` (from `Nova.Shared.Web`) — JWT bearer
+- [ ] `AddNovaJsonOptions` (from `Nova.Shared.Web`) — snake_case JSON wire format
+- [ ] `AddNovaProblemDetails` (from `Nova.Shared.Web`) — RFC 9457 error responses
 - [ ] Health checks (both MSSQL and Postgres)
 - [ ] Endpoint/route registration
 
@@ -393,9 +411,10 @@ Verify the following are wired in this order:
 
 ### 8.3 Program.cs — Middleware Pipeline
 
-- [ ] `CorrelationIdMiddleware` added to pipeline
+- [ ] `UseNovaProblemDetails()` is first (before all other middleware)
+- [ ] `CorrelationIdMiddleware` added after `UseNovaProblemDetails`
 - [ ] `TenantResolutionMiddleware` added to pipeline
-- [ ] Both are added before endpoint execution
+- [ ] All three are added before endpoint execution
 
 ### 8.4 appsettings.json
 
@@ -410,6 +429,26 @@ Verify the following are wired in this order:
 - [ ] Contains `Logging` section with `DefaultLevel`, `EnableRequestResponseLogging`, `EnableDiagnosticLogging`, `Windows` array
 - [ ] `Windows` array contains at least one example window with `Name`, `Start`, `End`, `Level`
 - [ ] Contains `Caching` section with `GloballyEnabled`, `EmergencyDisable`, `DryRunMode`, `Profiles`, `EndpointExclusions`
+
+### 8.5b JSON Serialisation
+
+- [ ] `Nova.Shared.Web/Errors/ProblemDetailsSetupExtensions.cs` exists
+- [ ] `AddNovaProblemDetails` calls `services.AddProblemDetails` with a `CustomizeProblemDetails` delegate
+- [ ] `CustomizeProblemDetails` adds `correlation_id` extension from `HttpContext.Items["X-Correlation-ID"]`
+- [ ] `CustomizeProblemDetails` adds `trace_id` extension from `Activity.Current?.Id ?? HttpContext.TraceIdentifier`
+- [ ] `CustomizeProblemDetails` sets `ProblemDetails.Instance = null` (no internal paths exposed)
+- [ ] `UseNovaProblemDetails` calls `UseExceptionHandler()` then `UseStatusCodePages()`
+- [ ] `UseNovaProblemDetails()` is the **first** middleware in `Program.cs` pipeline (before `CorrelationIdMiddleware`)
+- [ ] Hitting a non-existent route (e.g. `GET /does-not-exist`) returns `Content-Type: application/problem+json` with `status: 404`
+- [ ] Unhandled exceptions return `Content-Type: application/problem+json` with `status: 500` and no stack trace in the body
+
+- [ ] `Nova.Shared.Web/Serialisation/JsonSetupExtensions.cs` exists
+- [ ] `AddNovaJsonOptions` calls `ConfigureHttpJsonOptions` (not `AddControllers().AddJsonOptions`)
+- [ ] `PropertyNamingPolicy` is set to `JsonNamingPolicy.SnakeCaseLower`
+- [ ] `DictionaryKeyPolicy` is set to `JsonNamingPolicy.SnakeCaseLower`
+- [ ] `PropertyNameCaseInsensitive` is set to `true`
+- [ ] `GET /hello-world` response contains `correlation_id` (snake_case) — not `correlationId`
+- [ ] No per-endpoint `[JsonPropertyName]` attributes needed — the global policy covers all responses
 
 ### 8.6 GET /hello-world
 
@@ -527,6 +566,70 @@ This applies to domain service tables (not the shell test query, which reads leg
 
 ---
 
+## 14. API Conventions
+
+### 14.1 HTTP Method Convention
+
+- [ ] All data-retrieval endpoints (query operations) are mapped with `app.MapPost(...)` — not `MapGet`
+- [ ] `app.MapPatch(...)` is used for partial-update operations
+- [ ] `app.MapGet(...)` is only used for parameter-free endpoints (e.g. `/health`, `/hello-world`)
+- [ ] No query parameters in URLs for data retrieval — all filters passed in JSON body
+
+### 14.2 RequestContext Record
+
+- [ ] `Nova.Shared` contains a `RequestContext` record (or base record) with the 7 auto-injected fields: `TenantId`, `CompanyId`, `BranchId`, `UserId`, `BrowserLocale`, `BrowserTimezone`, `IpAddress`
+- [ ] All properties use `{ get; init; }` with appropriate nullability (`IpAddress` is `string?`)
+- [ ] Domain request records inherit from or compose `RequestContext`
+- [ ] XML `<summary>` doc on type and all properties
+
+### 14.3 Tenant ID Validation
+
+- [ ] Every POST/PATCH handler validates that `request.TenantId == TenantContext.TenantId` (resolved from JWT)
+- [ ] Mismatch returns HTTP 403 — not 400 or 401
+- [ ] This validation is not inline in each handler — it is performed in shared middleware or a base endpoint filter
+
+### 14.4 IP Address Handling
+
+- [ ] `ip_address` from request body is stored in the `updated_at` audit column (client-reported value)
+- [ ] Server reads `X-Forwarded-For` header (or `HttpContext.Connection.RemoteIpAddress`) for security/audit logging — not the body value
+- [ ] No security decisions (rate limiting, geo-blocking) use the body `ip_address` field
+
+---
+
+## 15. Aspire AppHost
+
+### 14.1 aspire.config.json (repo root)
+
+- [ ] `aspire.config.json` exists at repo root
+- [ ] Contains `"appHost": { "path": "src/host/Nova.AppHost/Nova.AppHost.csproj" }`
+
+### 14.2 Nova.AppHost project files
+
+- [ ] `src/host/Nova.AppHost/Nova.AppHost.csproj` exists
+- [ ] `src/host/Nova.AppHost/Program.cs` exists
+- [ ] `src/host/Nova.AppHost/Properties/launchSettings.json` exists with `http` and `https` profiles
+- [ ] `src/host/Nova.AppHost/appsettings.json` exists
+- [ ] `src/host/Nova.AppHost/appsettings.Development.json` exists
+
+### 14.3 Program.cs content
+
+- [ ] Calls `DistributedApplication.CreateBuilder(args)`
+- [ ] Registers Nova.Shell.Api: `builder.AddProject<Projects.Nova_Shell_Api>("shell")`
+- [ ] Does NOT call `AddServiceDefaults()` — Nova.Shared handles all cross-cutting concerns
+- [ ] Calls `builder.Build().Run()`
+
+### 14.4 launchSettings.json profiles
+
+- [ ] `http` profile includes `ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL`, `ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL`, `ASPIRE_ALLOW_UNSECURED_TRANSPORT`
+- [ ] `https` profile includes `ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL`, `ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL`, `ASPIRE_DASHBOARD_MCP_ENDPOINT_URL`
+
+### 14.5 Run verification
+
+- [ ] `dotnet build src/host/Nova.AppHost/Nova.AppHost.csproj` succeeds with 0 errors
+- [ ] `aspire run` from repo root starts without error and prints a dashboard login URL
+
+---
+
 ## Reporting Format
 
 After completing all checks, output the following:
@@ -550,6 +653,8 @@ After completing all checks, output the following:
 | 10. Audit Columns | x | x | x |
 | 11. Primary Keys | x | x | x |
 | 12. Multi-Tenancy | x | x | x |
+| 14. API Conventions | x | x | x |
+| 15. Aspire AppHost | x | x | x |
 | **TOTAL** | **x** | **x** | **x** |
 
 **Overall verdict: PASS / FAIL**
