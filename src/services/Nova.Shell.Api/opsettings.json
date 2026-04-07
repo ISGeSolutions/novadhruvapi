@@ -15,7 +15,7 @@
     "QueueLimit": 0
   },
   "OutboxRelay": {
-    "Enabled": true,
+    "Enabled": false,
     "PollingIntervalSeconds": 5,
     "BatchSize": 50
   },

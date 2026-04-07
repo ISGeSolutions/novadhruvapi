@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Nova.Shell.Api.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- Ensure config files are available alongside the test binary. -->
+    <PreserveCompilationContext>true</PreserveCompilationContext>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Test framework -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk"                    Version="17.*" />
+    <PackageReference Include="xunit"                                     Version="2.*" />
+    <PackageReference Include="xunit.runner.visualstudio"                 Version="2.*" />
+
+    <!-- In-process HTTP testing -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing"          Version="10.*" />
+
+    <!-- Assertions -->
+    <PackageReference Include="FluentAssertions"                          Version="7.*" />
+
+    <!-- Redis container for cache/lock endpoint tests -->
+    <PackageReference Include="Testcontainers.Redis"                      Version="4.*" />
+
+    <!-- JWT token generation in JwtFactory -->
+    <PackageReference Include="Microsoft.IdentityModel.Tokens"            Version="8.*" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt"           Version="8.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Service under test — project reference so the test host can boot Program -->
+    <ProjectReference Include="..\..\services\Nova.Shell.Api\Nova.Shell.Api.csproj" />
+  </ItemGroup>
+
+  <!-- Config files copied to output so the test host finds them at runtime. -->
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="opsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="migrationpolicy.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="xunit.runner.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- Point dotnet test at the run settings so TRX output and sequential execution
+       are applied without requiring a command-line flag. -->
+  <PropertyGroup>
+    <RunSettingsFilePath>$(MSBuildProjectDirectory)\Nova.Shell.Api.Tests.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+</Project>

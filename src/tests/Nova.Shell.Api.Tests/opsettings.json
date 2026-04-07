@@ -1,0 +1,29 @@
+{
+  "Logging": {
+    "DefaultLevel": "Information",
+    "EnableRequestResponseLogging": false,
+    "EnableDiagnosticLogging": true,
+    "Windows": []
+  },
+  "RateLimiting": {
+    "Enabled": false,
+    "PermitLimit": 10000,
+    "WindowSeconds": 60,
+    "QueueLimit": 0
+  },
+  "OutboxRelay": {
+    "Enabled": false,
+    "PollingIntervalSeconds": 60,
+    "BatchSize": 0
+  },
+  "Caching": {
+    "GloballyEnabled": true,
+    "EmergencyDisable": false,
+    "DryRunMode": false,
+    "Profiles": {
+      "ReferenceData":   { "Layer": "Redis", "TtlSeconds": 60,  "Enabled": true  },
+      "TransactionData": { "Layer": "None",  "TtlSeconds": 0,   "Enabled": false }
+    },
+    "EndpointExclusions": []
+  }
+}

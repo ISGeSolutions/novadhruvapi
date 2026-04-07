@@ -23,11 +23,16 @@ public static class SerilogSetupExtensions
         LogEventLevel initialLevel = TimeWindowLevelEvaluator.Evaluate(initialOps.Logging);
         LoggingLevelSwitch levelSwitch = new(initialLevel);
 
+        // Aspire injects OTEL_EXPORTER_OTLP_ENDPOINT — use it for Structured logs in the dashboard.
+        string? otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT");
+
         LoggerConfiguration loggerConfig = new LoggerConfiguration()
             .MinimumLevel.ControlledBy(levelSwitch)
             .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
             .MinimumLevel.Override("System", LogEventLevel.Warning)
             .Enrich.FromLogContext()
+            .WriteTo.Console(
+                outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}")
             .WriteTo.File(
                 path: "logs/audit-.log",
                 rollingInterval: RollingInterval.Day,
@@ -41,6 +46,13 @@ public static class SerilogSetupExtensions
                 rollingInterval: RollingInterval.Day,
                 restrictedToMinimumLevel: LogEventLevel.Debug,
                 outputTemplate: "{Timestamp:yyyy-MM-ddTHH:mm:ss.fffZ} [{Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}");
+        }
+
+        if (!string.IsNullOrEmpty(otlpEndpoint))
+        {
+            loggerConfig.WriteTo.OpenTelemetry(
+                endpoint: otlpEndpoint.TrimEnd('/') + "/v1/logs",
+                protocol: Serilog.Sinks.OpenTelemetry.OtlpProtocol.Grpc);
         }
 
         Log.Logger = loggerConfig.CreateLogger();

@@ -27,9 +27,9 @@ Alternatively use `aspire run` from the repo root (starts all services + dashboa
 
 | File | Purpose |
 |---|---|
-| `planning/postman/Nova.Auth.postman_collection.json` | Generates JWT tokens for authenticated requests |
-| `planning/postman/Nova.Shell.Api.postman_collection.json` | All Shell API endpoints and scenarios |
-| `planning/postman/Nova.Local.Dev.postman_environment.json` | Pre-configured environment with default values |
+| `postman/Nova.Auth.postman_collection.json` | Generates JWT tokens for authenticated requests |
+| `postman/Nova.Shell.Api.postman_collection.json` | All Shell API endpoints and scenarios |
+| `postman/Nova.Local.Dev.postman_environment.json` | Pre-configured environment with default values |
 
 **How to import:** Postman → Import → select the file. Import all three.
 

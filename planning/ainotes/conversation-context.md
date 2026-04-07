@@ -26,7 +26,7 @@ All foundation projects built and passing. Aspire AppHost added. snake_case JSON
 | `Nova.Shell.Api` | `src/services/Nova.Shell.Api/` | Built, verified |
 | `Nova.AppHost` | `src/host/Nova.AppHost/` | Built, verified |
 
-Postman collection and mock server files: `planning/postman/`
+Postman collection and mock server files: `postman/`
 
 **Next: Task 5 — Add API versioning (`Asp.Versioning.Http`, URL segment `/api/v1/`)**
 
@@ -34,8 +34,8 @@ Postman collection and mock server files: `planning/postman/`
 
 - `HelloWorldEndpoint.cs` — fixed `DateTime.UtcNow` → `DateTimeOffset.UtcNow`; changed anonymous object to typed `HelloWorldResponse` record (sets the team pattern)
 - `EchoEndpoint.cs` — new reference POST endpoint showing snake_case binding, `TypedResults.ValidationProblem` (400), `TypedResults.Problem` (404), deliberate throw (500), `TypedResults.Ok` with typed record
-- `planning/ainotes/nova-shell-api-guide.md` — new developer guide: middleware pipeline order, how to add an endpoint, snake_case rules, all Problem Details return patterns, tenant-aware query pattern, standard request context fields, audit columns, clone-to-new-service checklist
-- `planning/ainotes/running-and-testing.md` — fixed endpoint table (`correlation_id` snake_case, `/echo` added, `/health/mysql` → `/health/mariadb`); added Problem Details testing section
+- `src/services/Nova.Shell.Api/docs/nova-shell-api-guide.md` — new developer guide: middleware pipeline order, how to add an endpoint, snake_case rules, all Problem Details return patterns, tenant-aware query pattern, standard request context fields, audit columns, clone-to-new-service checklist
+- `src/services/Nova.Shell.Api/docs/shell-api-postman-testing.md` — fixed endpoint table (`correlation_id` snake_case, `/echo` added, `/health/mysql` → `/health/mariadb`); added Problem Details testing section
 
 ---
 
@@ -66,14 +66,14 @@ These tasks were agreed and are being implemented one at a time. After each task
 
 | File | Purpose |
 |---|---|
-| `planning/ainotes/nova-shell-api-guide.md` | **Dev team guide** — endpoint patterns, error handling, cloning to a new service |
+| `src/services/Nova.Shell.Api/docs/nova-shell-api-guide.md` | **Dev team guide** — endpoint patterns, error handling, cloning to a new service |
 | `planning/ainotes/architecture-design-prompt.md` | Original design brief (discussion only, no code) |
 | `planning/ainotes/codegen-shell-prompt.md` | Code-gen prompt — paste into new chat + append cipher.cs |
 | `planning/ainotes/acceptance-criteria.md` | Verification checklist — give to Claude Code to run against the repo |
 | `planning/ainotes/conversation-context.md` | This file |
-| `planning/ainotes/running-and-testing.md` | CLI commands, VS Code debug, Postman testing guide |
-| `planning/postman/Nova.Shell.Api.mock.postman_collection.json` | Postman mock server collection |
-| `planning/postman/MockServer-Setup.md` | Instructions for setting up the Postman mock |
+| `src/services/Nova.Shell.Api/docs/shell-api-postman-testing.md` | CLI commands, VS Code debug, Postman testing guide |
+| `postman/Nova.Shell.Api.postman_collection.json` | Postman collection — Shell API endpoints |
+| `postman/MockServer-Setup.md` | Instructions for setting up the Postman mock |
 
 ---
 
@@ -364,7 +364,7 @@ Every POST/PATCH request from the frontend `apiClient` (`src/services/apiNovaDhr
 ### Development Tooling
 - `.vscode/launch.json` at repo root — three VS Code debug configs: HTTP, console mode, attach to process.
 - `ENCRYPTION_KEY` must be set in the shell before launching (inherited via `${env:ENCRYPTION_KEY}`).
-- Run commands and Postman setup documented in `planning/ainotes/running-and-testing.md`.
+- Run commands and Postman setup documented in `src/services/Nova.Shell.Api/docs/shell-api-postman-testing.md`.
 
 ---
 

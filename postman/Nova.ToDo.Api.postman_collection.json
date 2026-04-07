@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Nova.ToDo.Api",
-    "description": "API contract for Nova.ToDo.Api \u2014 task management service.\n\nPort: 5101\n\nAuthentication: JWT Bearer token. Authentication and JWT validation are handled centrally by Nova.Shared.Web (AddNovaJwt / JwtSetupExtensions.cs). Obtain a token from Nova.Auth.Api:\n  POST /api/v1/auth/token\n  Body: { \"tenant_id\": \"T001\", \"shared_password\": \"...\" }\n  Response: { \"access_token\": \"eyJhbG...\", \"expires_in\": 3600 }\n\nSet the `access_token` collection variable before using any endpoint.\n\nAuto-injected context fields \u2014 added automatically by the API client on every POST/PATCH. Do not set manually. Shown in request examples for documentation only:\n  tenant_id, company_id, branch_id, user_id, browser_locale, browser_timezone, ip_address\n\nWire format: All JSON keys use snake_case.\n\nHTTP method convention: All data-retrieval endpoints use POST (filters in body). Partial updates use PATCH.",
+    "description": "API contract for Nova.ToDo.Api \u2014 task management service.\n\nPort: 5101\n\nAuthentication: JWT Bearer token. Authentication and JWT validation are handled centrally by Nova.Shared.Web (AddNovaJwt / JwtSetupExtensions.cs). Obtain a token from Nova.Auth.Api:\n  POST /api/v1/auth/token\n  Body: { \"tenant_id\": \"BLDK\", \"shared_password\": \"...\" }\n  Response: { \"access_token\": \"eyJhbG...\", \"expires_in\": 3600 }\n\nSet the `access_token` collection variable before using any endpoint.\n\nAuto-injected context fields \u2014 added automatically by the API client on every POST/PATCH. Do not set manually. Shown in request examples for documentation only:\n  tenant_id, company_id, branch_id, user_id, browser_locale, browser_timezone, ip_address\n\nWire format: All JSON keys use snake_case.\n\nHTTP method convention: All data-retrieval endpoints use POST (filters in body). Partial updates use PATCH.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -14,6 +14,96 @@
       }
     ]
   },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// -----------------------------------------------------------------------",
+          "// Nova.ToDo.Api — Auto JWT",
+          "// Generates a fresh HS256 token if none exists or the existing one is",
+          "// within 60 seconds of expiry. Reads from environment / collection vars.",
+          "// Required variables: jwt_secret, tenant_id, company_id, branch_id, user_id",
+          "// Optional variables: jwt_issuer (default: https://auth.nova.internal)",
+          "//                     jwt_audience (default: nova-api)",
+          "// -----------------------------------------------------------------------",
+          "",
+          "// Skip token generation for anonymous endpoints (hello-world, health/*)",
+          "const url = pm.request.url.toString();",
+          "if (url.includes('/hello-world') || url.includes('/health/')) {",
+          "    return;",
+          "}",
+          "",
+          "// Reuse the existing token if it is still valid (60 s buffer).",
+          "const existing = pm.variables.get('access_token');",
+          "if (existing) {",
+          "    try {",
+          "        const parts = existing.split('.');",
+          "        if (parts.length === 3) {",
+          "            const padded  = parts[1].replace(/-/g, '+').replace(/_/g, '/');",
+          "            const decoded = JSON.parse(CryptoJS.enc.Utf8.stringify(",
+          "                CryptoJS.enc.Base64.parse(padded)",
+          "            ));",
+          "            const now = Math.floor(Date.now() / 1000);",
+          "            if (decoded.exp && decoded.exp > now + 60) {",
+          "                console.log('[Nova.ToDo] access_token still valid — skipping refresh.');",
+          "                return;",
+          "            }",
+          "        }",
+          "    } catch (_) { /* malformed token — fall through to regenerate */ }",
+          "}",
+          "",
+          "// Validate required variables are present.",
+          "const required = ['jwt_secret', 'tenant_id', 'company_id', 'branch_id', 'user_id'];",
+          "for (const key of required) {",
+          "    if (!pm.variables.get(key)) {",
+          "        throw new Error('[Nova.ToDo] Missing variable: ' + key +",
+          "            '. Add it to your active environment or collection variables.');",
+          "    }",
+          "}",
+          "",
+          "// Build and sign the JWT.",
+          "const base64url = (obj) =>",
+          "    CryptoJS.enc.Base64",
+          "        .stringify(CryptoJS.enc.Utf8.parse(JSON.stringify(obj)))",
+          "        .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
+          "",
+          "const now = Math.floor(Date.now() / 1000);",
+          "",
+          "const header  = base64url({ alg: 'HS256', typ: 'JWT' });",
+          "const payload = base64url({",
+          "    iss:        pm.variables.get('jwt_issuer')   || 'https://auth.nova.internal',",
+          "    aud:        pm.variables.get('jwt_audience') || 'nova-api',",
+          "    sub:        pm.variables.get('user_id'),",
+          "    tenant_id:  pm.variables.get('tenant_id'),",
+          "    company_id: pm.variables.get('company_id'),",
+          "    branch_id:  pm.variables.get('branch_id'),",
+          "    user_id:    pm.variables.get('user_id'),",
+          "    iat: now,",
+          "    exp: now + 3600",
+          "});",
+          "",
+          "const signingInput = header + '.' + payload;",
+          "const rawSig       = CryptoJS.HmacSHA256(signingInput, pm.variables.get('jwt_secret'));",
+          "const signature    = CryptoJS.enc.Base64.stringify(rawSig)",
+          "    .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
+          "",
+          "const token = signingInput + '.' + signature;",
+          "",
+          "// Write to collection variables (takes precedence over globals).",
+          "// Also write to environment if one is active.",
+          "pm.collectionVariables.set('access_token', token);",
+          "try { pm.environment.set('access_token', token); } catch (_) {}",
+          "",
+          "console.log('[Nova.ToDo] access_token refreshed.');",
+          "console.log('  tenant_id: ' + pm.variables.get('tenant_id'));",
+          "console.log('  user_id:   ' + pm.variables.get('user_id'));",
+          "console.log('  expires:   ' + new Date((now + 3600) * 1000).toISOString());"
+        ]
+      }
+    }
+  ],
   "variable": [
     {
       "key": "baseUrl",
@@ -25,7 +115,19 @@
       "key": "access_token",
       "value": "",
       "type": "string",
-      "description": "JWT Bearer token. Obtain via Nova.Auth.Api: POST /api/v1/auth/token"
+      "description": "JWT Bearer token. Auto-generated by the collection pre-request script."
+    },
+    {
+      "key": "jwt_issuer",
+      "value": "https://auth.nova.internal",
+      "type": "string",
+      "description": "Must match Jwt.Issuer in appsettings.json."
+    },
+    {
+      "key": "jwt_audience",
+      "value": "nova-api",
+      "type": "string",
+      "description": "Must match Jwt.Audience in appsettings.json."
     },
     {
       "key": "seq_no",
@@ -69,7 +171,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"seq_no\": \"1042\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"seq_no\": \"1042\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -110,7 +212,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"seq_no\": \"1042\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"seq_no\": \"1042\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"seq_no\": \"1042\",\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"start_time\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"client_name\": null,\n  \"bkg_no\": 500310,\n  \"quote_no\": null,\n  \"campaign_code\": null,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"supplier_code\": null,\n  \"send_email_to_ind\": false,\n  \"sent_mail_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"send_sms_to\": null,\n  \"travel_pnr_no\": null,\n  \"seq_no_charges\": null,\n  \"seq_no_acct_notes\": null,\n  \"itinerary_no\": null,\n  \"done_ind\": false,\n  \"done_by\": null,\n  \"done_on\": null,\n  \"frz_ind\": false,\n  \"created_by\": \"JANEB\",\n  \"created_on\": \"2026-04-03T09:00:00+00:00\",\n  \"updated_by\": \"JANEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n  \"updated_at\": \"192.168.1.100\"\n}"
@@ -152,7 +254,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"seq_no\": \"1042\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"seq_no\": \"1042\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"seq_no\",\n      \"message\": \"seq_no is required.\"\n    }\n  ]\n}"
@@ -194,7 +296,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"seq_no\": \"1042\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"seq_no\": \"1042\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -236,7 +338,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"seq_no\": \"1042\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"seq_no\": \"1042\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.5\",\n  \"title\": \"Not Found\",\n  \"status\": 404,\n  \"detail\": \"ToDo record not found.\"\n}"
@@ -278,7 +380,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"seq_no\": \"1042\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"seq_no\": \"1042\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -315,7 +417,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"bkg_no\": 500310,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"bkg_no\": 500310,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -356,7 +458,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"seq_no\": \"1042\",\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"start_time\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"client_name\": null,\n  \"bkg_no\": 500310,\n  \"quote_no\": null,\n  \"campaign_code\": null,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"supplier_code\": null,\n  \"send_email_to_ind\": false,\n  \"sent_mail_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"send_sms_to\": null,\n  \"travel_pnr_no\": null,\n  \"seq_no_charges\": null,\n  \"seq_no_acct_notes\": null,\n  \"itinerary_no\": null,\n  \"done_ind\": false,\n  \"done_by\": null,\n  \"done_on\": null,\n  \"frz_ind\": false,\n  \"created_by\": \"JANEB\",\n  \"created_on\": \"2026-04-03T09:00:00+00:00\",\n  \"updated_by\": \"JANEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n  \"updated_at\": \"192.168.1.100\"\n}"
@@ -398,7 +500,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"bkg_no\",\n      \"message\": \"bkg_no is required.\"\n    },\n    {\n      \"field\": \"job_code\",\n      \"message\": \"job_code is required.\"\n    }\n  ]\n}"
@@ -440,7 +542,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -482,7 +584,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.5\",\n  \"title\": \"Not Found\",\n  \"status\": 404,\n  \"detail\": \"ToDo record not found.\"\n}"
@@ -512,7 +614,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/v1/todos/by-booking",
@@ -561,7 +663,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"quote_no\": 100234,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"quote_no\": 100234,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -602,7 +704,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"quote_no\": 100234,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"quote_no\": 100234,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"seq_no\": \"1042\",\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"start_time\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Follow up on India quote\",\n  \"est_job_time\": \"01:30\",\n  \"client_name\": null,\n  \"bkg_no\": null,\n  \"quote_no\": 100234,\n  \"campaign_code\": null,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": null,\n  \"dep_date\": null,\n  \"supplier_code\": null,\n  \"send_email_to_ind\": false,\n  \"sent_mail_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"send_sms_to\": null,\n  \"travel_pnr_no\": null,\n  \"seq_no_charges\": null,\n  \"seq_no_acct_notes\": null,\n  \"itinerary_no\": null,\n  \"done_ind\": false,\n  \"done_by\": null,\n  \"done_on\": null,\n  \"frz_ind\": false,\n  \"created_by\": \"JANEB\",\n  \"created_on\": \"2026-04-03T09:00:00+00:00\",\n  \"updated_by\": \"JANEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n  \"updated_at\": \"192.168.1.100\"\n}"
@@ -644,7 +746,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"quote_no\": 100234,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"quote_no\": 100234,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"quote_no\",\n      \"message\": \"quote_no is required.\"\n    },\n    {\n      \"field\": \"job_code\",\n      \"message\": \"job_code is required.\"\n    }\n  ]\n}"
@@ -686,7 +788,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"quote_no\": 100234,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"quote_no\": 100234,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -728,7 +830,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"quote_no\": 100234,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"quote_no\": 100234,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.5\",\n  \"title\": \"Not Found\",\n  \"status\": 404,\n  \"detail\": \"ToDo record not found.\"\n}"
@@ -758,7 +860,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"quote_no\": 100234,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"quote_no\": 100234,\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/v1/todos/by-quote",
@@ -807,7 +909,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -848,7 +950,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"seq_no\": \"1042\",\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"start_time\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Group tour debrief call\",\n  \"est_job_time\": \"01:30\",\n  \"client_name\": null,\n  \"bkg_no\": null,\n  \"quote_no\": null,\n  \"campaign_code\": null,\n  \"account_code_client\": null,\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"supplier_code\": null,\n  \"send_email_to_ind\": false,\n  \"sent_mail_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"send_sms_to\": null,\n  \"travel_pnr_no\": null,\n  \"seq_no_charges\": null,\n  \"seq_no_acct_notes\": null,\n  \"itinerary_no\": null,\n  \"done_ind\": false,\n  \"done_by\": null,\n  \"done_on\": null,\n  \"frz_ind\": false,\n  \"created_by\": \"JANEB\",\n  \"created_on\": \"2026-04-03T09:00:00+00:00\",\n  \"updated_by\": \"JANEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n  \"updated_at\": \"192.168.1.100\"\n}"
@@ -890,7 +992,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"tour_series_code\",\n      \"message\": \"tour_series_code is required.\"\n    },\n    {\n      \"field\": \"dep_date\",\n      \"message\": \"dep_date is required.\"\n    },\n    {\n      \"field\": \"job_code\",\n      \"message\": \"job_code is required.\"\n    }\n  ]\n}"
@@ -932,7 +1034,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -974,7 +1076,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.5\",\n  \"title\": \"Not Found\",\n  \"status\": 404,\n  \"detail\": \"ToDo record not found.\"\n}"
@@ -1004,7 +1106,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"job_code\": \"WH\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/v1/todos/by-tourseries-departure",
@@ -1053,7 +1155,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -1094,7 +1196,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"seq_no\": \"1042\",\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": null,\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"start_time\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Created from PNR activity\",\n  \"est_job_time\": \"01:30\",\n  \"client_name\": null,\n  \"bkg_no\": 500310,\n  \"quote_no\": null,\n  \"campaign_code\": null,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": null,\n  \"dep_date\": null,\n  \"supplier_code\": null,\n  \"send_email_to_ind\": false,\n  \"sent_mail_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"send_sms_to\": null,\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"seq_no_charges\": null,\n  \"seq_no_acct_notes\": null,\n  \"itinerary_no\": null,\n  \"done_ind\": false,\n  \"done_by\": null,\n  \"done_on\": null,\n  \"frz_ind\": false,\n  \"created_by\": \"JANEB\",\n  \"created_on\": \"2026-04-03T09:00:00+00:00\",\n  \"updated_by\": \"JANEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n  \"updated_at\": \"192.168.1.100\"\n}"
@@ -1136,7 +1238,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"task_source\",\n      \"message\": \"Exactly one task-source field must be provided: travel_pnr_no, seq_no_charges, seq_no_acct_notes, or itinerary_no.\"\n    }\n  ]\n}"
@@ -1178,7 +1280,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"task_source\",\n      \"message\": \"Only one task-source field may be provided. Found: travel_pnr_no, seq_no_charges.\"\n    }\n  ]\n}"
@@ -1220,7 +1322,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -1262,7 +1364,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.5\",\n  \"title\": \"Not Found\",\n  \"status\": 404,\n  \"detail\": \"ToDo record not found.\"\n}"
@@ -1292,7 +1394,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/v1/todos/by-task-source",
@@ -1346,7 +1448,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -1386,7 +1488,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"seq_no\": \"1043\"\n}"
@@ -1427,7 +1529,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"seq_no\": \"1042\"\n}"
@@ -1468,7 +1570,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"seq_no\": \"1042\"\n}"
@@ -1542,7 +1644,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"job_code\",\n      \"message\": \"job_code is required.\"\n    },\n    {\n      \"field\": \"task_detail\",\n      \"message\": \"task_detail is required.\"\n    },\n    {\n      \"field\": \"assigned_to_user_code\",\n      \"message\": \"assigned_to_user_code is required.\"\n    },\n    {\n      \"field\": \"priority_code\",\n      \"message\": \"priority_code is required.\"\n    },\n    {\n      \"field\": \"due_date\",\n      \"message\": \"due_date is required.\"\n    },\n    {\n      \"field\": \"assigned_by_user_code\",\n      \"message\": \"assigned_by_user_code is required.\"\n    }\n  ]\n}"
@@ -1583,7 +1685,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -1624,7 +1726,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.4\",\n  \"title\": \"Forbidden\",\n  \"status\": 403,\n  \"detail\": \"You do not have permission to perform this action.\"\n}"
@@ -1665,7 +1767,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.21\",\n  \"title\": \"Unprocessable Entity\",\n  \"status\": 422,\n  \"detail\": \"One or more business rules were violated.\",\n  \"errors\": [\n    {\n      \"field\": \"job_code\",\n      \"message\": \"job_code 'XX' not found in jobs lookup.\"\n    },\n    {\n      \"field\": \"assigned_to_user_code\",\n      \"message\": \"assigned_to_user_code 'ZZXYZ' not found in users lookup.\"\n    }\n  ]\n}"
@@ -1706,7 +1808,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"job_code\": \"WH\",\n  \"task_detail\": \"Welcome home call\",\n  \"assigned_to_user_code\": \"JOEB\",\n  \"priority_code\": \"N\",\n  \"due_date\": \"2026-10-01\",\n  \"due_time\": \"10:30\",\n  \"in_flexible_ind\": false,\n  \"start_date\": null,\n  \"assigned_by_user_code\": \"JANEB\",\n  \"assigned_on\": \"2026-04-03T09:00:00+00:00\",\n  \"remark\": \"Customer returning from India trip\",\n  \"est_job_time\": \"01:30\",\n  \"bkg_no\": 500310,\n  \"account_code_client\": \"0000123456\",\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date\": \"2026-12-15\",\n  \"send_email_to_ind\": false,\n  \"alert_to_ind\": false,\n  \"send_sms_ind\": false,\n  \"travel_pnr_no\": \"XY2RP6\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -1743,7 +1845,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -1772,7 +1874,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/v1/todos/{{seq_no}}",
@@ -1848,7 +1950,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/v1/todos/{{seq_no}}",
@@ -1890,7 +1992,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/v1/todos/{{seq_no}}",
@@ -1932,7 +2034,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/v1/todos/{{seq_no}}",
@@ -1974,7 +2076,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/v1/todos/{{seq_no}}",
@@ -2016,7 +2118,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/v1/todos/{{seq_no}}",
@@ -2058,7 +2160,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"due_date\": \"2026-11-01\",\n  \"assigned_to_user_code\": \"JANEB\",\n  \"remark\": \"Rescheduled \u2014 customer delayed return\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/v1/todos/{{seq_no}}",
@@ -2108,7 +2210,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -2150,7 +2252,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"message\": \"Record deleted.\"\n}"
@@ -2193,7 +2295,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"updated_on\",\n      \"message\": \"updated_on is required for concurrency check.\"\n    }\n  ]\n}"
@@ -2236,7 +2338,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -2279,7 +2381,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.5\",\n  \"title\": \"Not Found\",\n  \"status\": 404,\n  \"detail\": \"ToDo record not found.\"\n}"
@@ -2322,7 +2424,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.10\",\n  \"title\": \"Conflict\",\n  \"status\": 409,\n  \"detail\": \"Record was updated between your read and update. Refresh data.\"\n}"
@@ -2365,7 +2467,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -2403,7 +2505,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -2445,7 +2547,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"seq_no\": \"1042\",\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\"\n}"
@@ -2488,7 +2590,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"seq_no\": \"1042\",\n  \"frz_ind\": false,\n  \"updated_on\": \"2026-04-03T15:05:00+00:00\"\n}"
@@ -2531,7 +2633,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"frz_ind\",\n      \"message\": \"frz_ind is required.\"\n    },\n    {\n      \"field\": \"updated_on\",\n      \"message\": \"updated_on is required for concurrency check.\"\n    }\n  ]\n}"
@@ -2574,7 +2676,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -2617,7 +2719,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.5\",\n  \"title\": \"Not Found\",\n  \"status\": 404,\n  \"detail\": \"ToDo record not found.\"\n}"
@@ -2660,7 +2762,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.10\",\n  \"title\": \"Conflict\",\n  \"status\": 409,\n  \"detail\": \"Record was updated between your read and update. Refresh data.\"\n}"
@@ -2703,7 +2805,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.21\",\n  \"title\": \"Unprocessable Entity\",\n  \"status\": 422,\n  \"detail\": \"Record is already frozen.\"\n}"
@@ -2746,7 +2848,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"frz_ind\": true,\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -2784,7 +2886,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -2826,7 +2928,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"seq_no\": \"1042\",\n  \"done_ind\": true,\n  \"done_by\": \"JOEB\",\n  \"done_on\": \"2026-04-03T14:22:00+00:00\",\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\"\n}"
@@ -2869,7 +2971,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"done_by\",\n      \"message\": \"done_by is required.\"\n    },\n    {\n      \"field\": \"updated_on\",\n      \"message\": \"updated_on is required for concurrency check.\"\n    }\n  ]\n}"
@@ -2912,7 +3014,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -2955,7 +3057,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.5\",\n  \"title\": \"Not Found\",\n  \"status\": 404,\n  \"detail\": \"ToDo record not found.\"\n}"
@@ -2998,7 +3100,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.10\",\n  \"title\": \"Conflict\",\n  \"status\": 409,\n  \"detail\": \"Record was updated between your read and update. Refresh data.\"\n}"
@@ -3041,7 +3143,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.21\",\n  \"title\": \"Unprocessable Entity\",\n  \"status\": 422,\n  \"detail\": \"Task is already completed.\"\n}"
@@ -3084,7 +3186,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"done_by\": \"JOEB\",\n  \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -3122,7 +3224,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -3164,7 +3266,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"seq_no\": \"1042\",\n  \"done_ind\": false,\n  \"done_by\": null,\n  \"done_on\": null,\n  \"updated_on\": \"2026-04-03T15:10:00+00:00\"\n}"
@@ -3207,7 +3309,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"updated_on\",\n      \"message\": \"updated_on is required for concurrency check.\"\n    }\n  ]\n}"
@@ -3250,7 +3352,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -3293,7 +3395,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.5\",\n  \"title\": \"Not Found\",\n  \"status\": 404,\n  \"detail\": \"ToDo record not found.\"\n}"
@@ -3336,7 +3438,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.10\",\n  \"title\": \"Conflict\",\n  \"status\": 409,\n  \"detail\": \"Record was updated between your read and update. Refresh data.\"\n}"
@@ -3379,7 +3481,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"updated_on\": \"2026-04-03T14:22:00+00:00\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -3423,7 +3525,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -3465,7 +3567,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [\n    {\n      \"seq_no\": \"1042\",\n      \"priority_code\": \"N\",\n      \"priority_name\": \"Normal\",\n      \"start_date\": null,\n      \"due_date\": \"2026-10-01\",\n      \"assigned_to_user_code\": \"JOEB\",\n      \"assigned_to_user_name\": \"Joe Blog\",\n      \"task_detail\": \"Welcome home call\",\n      \"remark\": \"Customer returning from India trip\",\n      \"created_by\": \"JANEB\",\n      \"created_by_name\": \"Jane Blog\",\n      \"created_on\": \"2026-04-03T09:00:00+00:00\",\n      \"updated_by\": \"JANEB\",\n      \"updated_by_name\": \"Jane Blog\",\n      \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n      \"send_sms_ind\": false,\n      \"send_sms_to\": null,\n      \"sent_mail_ind\": false,\n      \"done_ind\": false,\n      \"account_code_client\": \"0000123456\",\n      \"client_name\": \"Sunil Gavaskar\",\n      \"bkg_no\": 500310,\n      \"quote_no\": null,\n      \"tour_code\": \"EXP2026\",\n      \"itinerary_name\": \"Indian Experience\",\n      \"frz_ind\": false\n    },\n    {\n      \"seq_no\": \"1043\",\n      \"priority_code\": \"H\",\n      \"priority_name\": \"High\",\n      \"start_date\": \"2026-09-01\",\n      \"due_date\": \"2026-09-15\",\n      \"assigned_to_user_code\": \"JOEB\",\n      \"assigned_to_user_name\": \"Joe Blog\",\n      \"task_detail\": \"Chase visa documentation\",\n      \"remark\": null,\n      \"created_by\": \"JOEB\",\n      \"created_by_name\": \"Joe Blog\",\n      \"created_on\": \"2026-04-01T11:30:00+00:00\",\n      \"updated_by\": \"JOEB\",\n      \"updated_by_name\": \"Joe Blog\",\n      \"updated_on\": \"2026-04-01T11:30:00+00:00\",\n      \"send_sms_ind\": false,\n      \"send_sms_to\": null,\n      \"sent_mail_ind\": false,\n      \"done_ind\": false,\n      \"account_code_client\": \"0000123456\",\n      \"client_name\": \"Sunil Gavaskar\",\n      \"bkg_no\": 500310,\n      \"quote_no\": null,\n      \"tour_code\": \"EXP2026\",\n      \"itinerary_name\": \"Indian Experience\",\n      \"frz_ind\": false\n    }\n  ],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -3508,7 +3610,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -3551,7 +3653,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"assigned_to_user_code\",\n      \"message\": \"assigned_to_user_code is required.\"\n    }\n  ]\n}"
@@ -3594,7 +3696,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -3637,7 +3739,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -3675,7 +3777,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date_from\": \"2026-12-01\",\n  \"dep_date_to\": \"2026-12-31\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date_from\": \"2026-12-01\",\n  \"dep_date_to\": \"2026-12-31\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -3717,7 +3819,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date_from\": \"2026-12-01\",\n  \"dep_date_to\": \"2026-12-31\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date_from\": \"2026-12-01\",\n  \"dep_date_to\": \"2026-12-31\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [\n    {\n      \"seq_no\": \"1042\",\n      \"priority_code\": \"N\",\n      \"priority_name\": \"Normal\",\n      \"start_date\": null,\n      \"due_date\": \"2026-10-01\",\n      \"assigned_to_user_code\": \"JOEB\",\n      \"assigned_to_user_name\": \"Joe Blog\",\n      \"task_detail\": \"Welcome home call\",\n      \"remark\": \"Customer returning from India trip\",\n      \"created_by\": \"JANEB\",\n      \"created_by_name\": \"Jane Blog\",\n      \"created_on\": \"2026-04-03T09:00:00+00:00\",\n      \"updated_by\": \"JANEB\",\n      \"updated_by_name\": \"Jane Blog\",\n      \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n      \"send_sms_ind\": false,\n      \"send_sms_to\": null,\n      \"sent_mail_ind\": false,\n      \"done_ind\": false,\n      \"account_code_client\": \"0000123456\",\n      \"client_name\": \"Sunil Gavaskar\",\n      \"bkg_no\": 500310,\n      \"quote_no\": null,\n      \"tour_code\": \"EXP2026\",\n      \"itinerary_name\": \"Indian Experience\",\n      \"frz_ind\": false\n    }\n  ],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -3760,7 +3862,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date_from\": \"2026-12-01\",\n  \"dep_date_to\": \"2026-12-31\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date_from\": \"2026-12-01\",\n  \"dep_date_to\": \"2026-12-31\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -3803,7 +3905,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date_from\": \"2026-12-01\",\n  \"dep_date_to\": \"2026-12-31\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date_from\": \"2026-12-01\",\n  \"dep_date_to\": \"2026-12-31\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"tour_series_code\",\n      \"message\": \"tour_series_code is required.\"\n    },\n    {\n      \"field\": \"dep_date_from\",\n      \"message\": \"dep_date_from is required.\"\n    },\n    {\n      \"field\": \"dep_date_to\",\n      \"message\": \"dep_date_to is required.\"\n    }\n  ]\n}"
@@ -3846,7 +3948,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date_from\": \"2026-12-01\",\n  \"dep_date_to\": \"2026-12-31\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date_from\": \"2026-12-01\",\n  \"dep_date_to\": \"2026-12-31\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -3889,7 +3991,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date_from\": \"2026-12-01\",\n  \"dep_date_to\": \"2026-12-31\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"tour_series_code\": \"EXP2026\",\n  \"dep_date_from\": \"2026-12-01\",\n  \"dep_date_to\": \"2026-12-31\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -3927,7 +4029,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"bkg_no\": 500310,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"bkg_no\": 500310,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -3969,7 +4071,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [\n    {\n      \"seq_no\": \"1042\",\n      \"priority_code\": \"N\",\n      \"priority_name\": \"Normal\",\n      \"start_date\": null,\n      \"due_date\": \"2026-10-01\",\n      \"assigned_to_user_code\": \"JOEB\",\n      \"assigned_to_user_name\": \"Joe Blog\",\n      \"task_detail\": \"Welcome home call\",\n      \"remark\": \"Customer returning from India trip\",\n      \"created_by\": \"JANEB\",\n      \"created_by_name\": \"Jane Blog\",\n      \"created_on\": \"2026-04-03T09:00:00+00:00\",\n      \"updated_by\": \"JANEB\",\n      \"updated_by_name\": \"Jane Blog\",\n      \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n      \"send_sms_ind\": false,\n      \"send_sms_to\": null,\n      \"sent_mail_ind\": false,\n      \"done_ind\": false,\n      \"account_code_client\": \"0000123456\",\n      \"client_name\": \"Sunil Gavaskar\",\n      \"bkg_no\": 500310,\n      \"quote_no\": null,\n      \"tour_code\": \"EXP2026\",\n      \"itinerary_name\": \"Indian Experience\",\n      \"frz_ind\": false\n    }\n  ],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -4012,7 +4114,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -4055,7 +4157,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"bkg_no\",\n      \"message\": \"bkg_no is required.\"\n    }\n  ]\n}"
@@ -4098,7 +4200,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -4141,7 +4243,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -4179,7 +4281,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"quote_no\": 100234,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"quote_no\": 100234,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -4221,7 +4323,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"quote_no\": 100234,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"quote_no\": 100234,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [\n    {\n      \"seq_no\": \"1042\",\n      \"priority_code\": \"N\",\n      \"priority_name\": \"Normal\",\n      \"start_date\": null,\n      \"due_date\": \"2026-10-01\",\n      \"assigned_to_user_code\": \"JOEB\",\n      \"assigned_to_user_name\": \"Joe Blog\",\n      \"task_detail\": \"Follow up on India quote\",\n      \"remark\": null,\n      \"created_by\": \"JANEB\",\n      \"created_by_name\": \"Jane Blog\",\n      \"created_on\": \"2026-04-03T09:00:00+00:00\",\n      \"updated_by\": \"JANEB\",\n      \"updated_by_name\": \"Jane Blog\",\n      \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n      \"send_sms_ind\": false,\n      \"send_sms_to\": null,\n      \"sent_mail_ind\": false,\n      \"done_ind\": false,\n      \"account_code_client\": \"0000123456\",\n      \"client_name\": \"Sunil Gavaskar\",\n      \"bkg_no\": null,\n      \"quote_no\": 100234,\n      \"tour_code\": null,\n      \"itinerary_name\": null,\n      \"frz_ind\": false\n    }\n  ],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -4264,7 +4366,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"quote_no\": 100234,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"quote_no\": 100234,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -4307,7 +4409,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"quote_no\": 100234,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"quote_no\": 100234,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"quote_no\",\n      \"message\": \"quote_no is required.\"\n    }\n  ]\n}"
@@ -4350,7 +4452,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"quote_no\": 100234,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"quote_no\": 100234,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -4393,7 +4495,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"quote_no\": 100234,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"quote_no\": 100234,\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -4431,7 +4533,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"campaign_code\": \"FACEBOOK\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"campaign_code\": \"FACEBOOK\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -4473,7 +4575,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"campaign_code\": \"FACEBOOK\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"campaign_code\": \"FACEBOOK\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [\n    {\n      \"seq_no\": \"1042\",\n      \"priority_code\": \"N\",\n      \"priority_name\": \"Normal\",\n      \"start_date\": null,\n      \"due_date\": \"2026-10-01\",\n      \"assigned_to_user_code\": \"JOEB\",\n      \"assigned_to_user_name\": \"Joe Blog\",\n      \"task_detail\": \"Facebook lead follow-up\",\n      \"remark\": null,\n      \"created_by\": \"JANEB\",\n      \"created_by_name\": \"Jane Blog\",\n      \"created_on\": \"2026-04-03T09:00:00+00:00\",\n      \"updated_by\": \"JANEB\",\n      \"updated_by_name\": \"Jane Blog\",\n      \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n      \"send_sms_ind\": false,\n      \"send_sms_to\": null,\n      \"sent_mail_ind\": false,\n      \"done_ind\": false,\n      \"account_code_client\": \"0000123456\",\n      \"client_name\": \"Sunil Gavaskar\",\n      \"bkg_no\": null,\n      \"quote_no\": null,\n      \"tour_code\": null,\n      \"itinerary_name\": null,\n      \"frz_ind\": false\n    }\n  ],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -4516,7 +4618,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"campaign_code\": \"FACEBOOK\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"campaign_code\": \"FACEBOOK\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -4559,7 +4661,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"campaign_code\": \"FACEBOOK\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"campaign_code\": \"FACEBOOK\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"campaign_code\",\n      \"message\": \"campaign_code is required.\"\n    }\n  ]\n}"
@@ -4602,7 +4704,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"campaign_code\": \"FACEBOOK\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"campaign_code\": \"FACEBOOK\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -4645,7 +4747,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"campaign_code\": \"FACEBOOK\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"campaign_code\": \"FACEBOOK\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -4683,7 +4785,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"account_code_client\": \"0000123456\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"account_code_client\": \"0000123456\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -4725,7 +4827,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"account_code_client\": \"0000123456\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"account_code_client\": \"0000123456\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [\n    {\n      \"seq_no\": \"1042\",\n      \"priority_code\": \"N\",\n      \"priority_name\": \"Normal\",\n      \"start_date\": null,\n      \"due_date\": \"2026-10-01\",\n      \"assigned_to_user_code\": \"JOEB\",\n      \"assigned_to_user_name\": \"Joe Blog\",\n      \"task_detail\": \"Welcome home call\",\n      \"remark\": \"Customer returning from India trip\",\n      \"created_by\": \"JANEB\",\n      \"created_by_name\": \"Jane Blog\",\n      \"created_on\": \"2026-04-03T09:00:00+00:00\",\n      \"updated_by\": \"JANEB\",\n      \"updated_by_name\": \"Jane Blog\",\n      \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n      \"send_sms_ind\": false,\n      \"send_sms_to\": null,\n      \"sent_mail_ind\": false,\n      \"done_ind\": false,\n      \"account_code_client\": \"0000123456\",\n      \"client_name\": \"Sunil Gavaskar\",\n      \"bkg_no\": 500310,\n      \"quote_no\": null,\n      \"tour_code\": \"EXP2026\",\n      \"itinerary_name\": \"Indian Experience\",\n      \"frz_ind\": false\n    }\n  ],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -4768,7 +4870,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"account_code_client\": \"0000123456\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"account_code_client\": \"0000123456\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -4811,7 +4913,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"account_code_client\": \"0000123456\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"account_code_client\": \"0000123456\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"account_code_client\",\n      \"message\": \"account_code_client is required.\"\n    }\n  ]\n}"
@@ -4854,7 +4956,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"account_code_client\": \"0000123456\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"account_code_client\": \"0000123456\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -4897,7 +4999,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"account_code_client\": \"0000123456\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"account_code_client\": \"0000123456\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -4935,7 +5037,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"supplier_code\": \"0000000001\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"supplier_code\": \"0000000001\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -4977,7 +5079,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"supplier_code\": \"0000000001\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"supplier_code\": \"0000000001\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [\n    {\n      \"seq_no\": \"1042\",\n      \"priority_code\": \"N\",\n      \"priority_name\": \"Normal\",\n      \"start_date\": null,\n      \"due_date\": \"2026-10-01\",\n      \"assigned_to_user_code\": \"JOEB\",\n      \"assigned_to_user_name\": \"Joe Blog\",\n      \"task_detail\": \"Chase supplier confirmation\",\n      \"remark\": null,\n      \"created_by\": \"JANEB\",\n      \"created_by_name\": \"Jane Blog\",\n      \"created_on\": \"2026-04-03T09:00:00+00:00\",\n      \"updated_by\": \"JANEB\",\n      \"updated_by_name\": \"Jane Blog\",\n      \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n      \"send_sms_ind\": false,\n      \"send_sms_to\": null,\n      \"sent_mail_ind\": false,\n      \"done_ind\": false,\n      \"account_code_client\": null,\n      \"client_name\": null,\n      \"bkg_no\": 500310,\n      \"quote_no\": null,\n      \"tour_code\": \"EXP2026\",\n      \"itinerary_name\": \"Indian Experience\",\n      \"frz_ind\": false\n    }\n  ],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -5020,7 +5122,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"supplier_code\": \"0000000001\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"supplier_code\": \"0000000001\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -5063,7 +5165,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"supplier_code\": \"0000000001\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"supplier_code\": \"0000000001\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"supplier_code\",\n      \"message\": \"supplier_code is required.\"\n    }\n  ]\n}"
@@ -5106,7 +5208,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"supplier_code\": \"0000000001\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"supplier_code\": \"0000000001\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -5149,7 +5251,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"supplier_code\": \"0000000001\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"supplier_code\": \"0000000001\",\n  \"done_ind\": false,\n  \"due_date_from\": \"2026-01-01\",\n  \"due_date_to\": \"2026-12-31\",\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -5187,7 +5289,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -5229,7 +5331,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [\n    {\n      \"seq_no\": \"1042\",\n      \"priority_code\": \"N\",\n      \"priority_name\": \"Normal\",\n      \"start_date\": null,\n      \"due_date\": \"2026-10-01\",\n      \"assigned_to_user_code\": \"JOEB\",\n      \"assigned_to_user_name\": \"Joe Blog\",\n      \"task_detail\": \"PNR deadline follow-up\",\n      \"remark\": \"Created from PNR activity\",\n      \"created_by\": \"JANEB\",\n      \"created_by_name\": \"Jane Blog\",\n      \"created_on\": \"2026-04-03T09:00:00+00:00\",\n      \"updated_by\": \"JANEB\",\n      \"updated_by_name\": \"Jane Blog\",\n      \"updated_on\": \"2026-04-03T09:00:00+00:00\",\n      \"send_sms_ind\": false,\n      \"send_sms_to\": null,\n      \"sent_mail_ind\": false,\n      \"done_ind\": false,\n      \"account_code_client\": \"0000123456\",\n      \"client_name\": \"Sunil Gavaskar\",\n      \"bkg_no\": 500310,\n      \"quote_no\": null,\n      \"tour_code\": \"EXP2026\",\n      \"itinerary_name\": \"Indian Experience\",\n      \"frz_ind\": false\n    }\n  ],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -5272,7 +5374,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"items\": [],\n  \"page_no\": 1,\n  \"page_size\": 50,\n  \"has_next_page\": false\n}"
@@ -5315,7 +5417,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"task_source\",\n      \"message\": \"Exactly one task-source field must be provided: travel_pnr_no, seq_no_charges, seq_no_acct_notes, or itinerary_no.\"\n    }\n  ]\n}"
@@ -5358,7 +5460,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"task_source\",\n      \"message\": \"Only one task-source field may be provided. Found: travel_pnr_no, seq_no_charges.\"\n    }\n  ]\n}"
@@ -5401,7 +5503,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -5444,7 +5546,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"travel_pnr_no\": \"XY2RP6\",\n  \"done_ind\": false,\n  \"include_frozen\": false,\n  \"page_no\": 1,\n  \"page_size\": 50,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -5488,7 +5590,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -5530,7 +5632,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"assigned_to_user_code\": \"JOEB\",\n  \"due_today\": {\n    \"total\": 8,\n    \"by_priority\": {\n      \"high\": 3,\n      \"normal\": 4,\n      \"low\": 1\n    }\n  },\n  \"overdue\": {\n    \"total\": 5,\n    \"by_priority\": {\n      \"high\": 2,\n      \"normal\": 2,\n      \"low\": 1\n    }\n  },\n  \"wip\": 12,\n  \"created_and_due_today\": 2,\n  \"completed_today\": 7\n}"
@@ -5573,7 +5675,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"assigned_to_user_code\",\n      \"message\": \"assigned_to_user_code is required.\"\n    }\n  ]\n}"
@@ -5616,7 +5718,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -5659,7 +5761,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"assigned_to_user_code\": \"JOEB\",\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
@@ -5697,7 +5799,7 @@
                   "language": "json"
                 }
               },
-              "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+              "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
             }
           },
           "response": [
@@ -5739,7 +5841,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"filter\": {\n    \"bkg_no\": 500310\n  },\n  \"due_today\": {\n    \"total\": 3,\n    \"by_priority\": {\n      \"high\": 1,\n      \"normal\": 2,\n      \"low\": 0\n    }\n  },\n  \"overdue\": {\n    \"total\": 1,\n    \"by_priority\": {\n      \"high\": 0,\n      \"normal\": 1,\n      \"low\": 0\n    }\n  },\n  \"wip\": 2,\n  \"created_and_due_today\": 0,\n  \"completed\": 14\n}"
@@ -5782,7 +5884,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"filter\": {\n    \"account_code_client\": \"0000123456\"\n  },\n  \"due_today\": {\n    \"total\": 5,\n    \"by_priority\": {\n      \"high\": 2,\n      \"normal\": 2,\n      \"low\": 1\n    }\n  },\n  \"overdue\": {\n    \"total\": 3,\n    \"by_priority\": {\n      \"high\": 1,\n      \"normal\": 2,\n      \"low\": 0\n    }\n  },\n  \"wip\": 4,\n  \"created_and_due_today\": 1,\n  \"completed\": 21\n}"
@@ -5825,7 +5927,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"filter\": {\n    \"supplier_code\": \"0000000001\"\n  },\n  \"due_today\": {\n    \"total\": 2,\n    \"by_priority\": {\n      \"high\": 0,\n      \"normal\": 1,\n      \"low\": 1\n    }\n  },\n  \"overdue\": {\n    \"total\": 0,\n    \"by_priority\": {\n      \"high\": 0,\n      \"normal\": 0,\n      \"low\": 0\n    }\n  },\n  \"wip\": 1,\n  \"created_and_due_today\": 0,\n  \"completed\": 9\n}"
@@ -5868,7 +5970,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"context\",\n      \"message\": \"Exactly one context group must be provided: bkg_no, quote_no, account_code_client, supplier_code, or tour_series_code+dep_date.\"\n    }\n  ]\n}"
@@ -5911,7 +6013,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"One or more validation errors occurred.\",\n  \"errors\": [\n    {\n      \"field\": \"context\",\n      \"message\": \"Only one context group may be provided. Found: bkg_no, quote_no.\"\n    }\n  ]\n}"
@@ -5954,7 +6056,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Unauthorised. Valid JWT Bearer token required.\"\n}"
@@ -5997,10 +6099,206 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"T001\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+                  "raw": "{\n  \"bkg_no\": 500310,\n\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"C01\",\n  \"branch_id\": \"B01\",\n  \"user_id\": \"JOEB\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.6.1\",\n  \"title\": \"An error occurred while processing your request.\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred. See server logs for details.\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+    ,
+    {
+      "name": "Diagnostics",
+      "description": "Liveness, DB health, and migration admin endpoints. No authentication required.",
+      "item": [
+        {
+          "name": "Hello World (liveness)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/hello-world",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "hello-world"]
+            },
+            "description": "Liveness check. No auth required. Use this to confirm the service is up and routing correctly before running authenticated tests."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Correlation-ID", "value": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
+              ],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/hello-world",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "hello-world"]
+                }
+              },
+              "body": "{\n  \"message\": \"Hello from Nova.ToDo.Api!\",\n  \"timestamp\": \"2026-04-05T09:00:00+00:00\",\n  \"correlation_id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "DB Health — by Tenant",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/db/BLDK",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "db", "BLDK"]
+            },
+            "description": "Runs SELECT 1 against the named tenant's connection string and reports latency. Replace BLDK in the path with any registered tenant_id."
+          },
+          "response": [
+            {
+              "name": "200 OK — healthy",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/db/BLDK",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["health", "db", "BLDK"]
+                }
+              },
+              "body": "{\n  \"tenant_id\": \"BLDK\",\n  \"db_type\": \"MsSql\",\n  \"status\": \"healthy\",\n  \"latency_ms\": 4\n}"
+            },
+            {
+              "name": "404 Not Found — unknown tenant",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/db/UNKNOWN",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["health", "db", "UNKNOWN"]
+                }
+              },
+              "body": "{\n  \"error\": \"Tenant 'UNKNOWN' not found.\"\n}"
+            },
+            {
+              "name": "503 Service Unavailable — unhealthy",
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/db/BLDK",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["health", "db", "BLDK"]
+                }
+              },
+              "body": "{\n  \"tenant_id\": \"BLDK\",\n  \"db_type\": \"MsSql\",\n  \"status\": \"unhealthy\",\n  \"error\": \"A network-related or instance-specific error occurred while establishing a connection.\",\n  \"latency_ms\": 5002\n}"
+            }
+          ]
+        },
+        {
+          "name": "Run Migrations — all tenants",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/migrations/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "migrations", "run"]
+            },
+            "description": "Applies pending DbUp migration scripts for all registered tenants. Safe scripts only — destructive SQL (DROP, TRUNCATE) is blocked automatically. Run after each deployment."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/migrations/run",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "migrations", "run"]
+                }
+              },
+              "body": "{\n  \"migrations\": [\n    {\n      \"tenant_id\": \"BLDK\",\n      \"applied\": [\"V001__CreateToDo.sql\"],\n      \"blocked\": [],\n      \"blocked_scripts\": []\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Run Migrations — single tenant",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/migrations/run?tenantId=BLDK",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "migrations", "run"],
+              "query": [
+                {
+                  "key": "tenantId",
+                  "value": "BLDK",
+                  "description": "Run migrations for this tenant only"
+                }
+              ]
+            },
+            "description": "Applies pending DbUp migration scripts for a single tenant only."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/migrations/run?tenantId=BLDK",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "migrations", "run"],
+                  "query": [
+                    { "key": "tenantId", "value": "BLDK" }
+                  ]
+                }
+              },
+              "body": "{\n  \"migrations\": [\n    {\n      \"tenant_id\": \"BLDK\",\n      \"applied\": [\"V001__CreateToDo.sql\"],\n      \"blocked\": [],\n      \"blocked_scripts\": []\n    }\n  ]\n}"
             }
           ]
         }

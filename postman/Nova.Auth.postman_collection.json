@@ -27,7 +27,7 @@
   "item": [
     {
       "name": "1. Generate Dev JWT",
-      "description": "Generates a signed JWT from your environment variables and stores it as access_token. Run this first before making authenticated requests to any Nova API service.\n\nRequired environment variables (set in 'Nova Local Dev' environment):\n  jwt_secret    — plaintext JWT secret (decrypt from appsettings.json using ENCRYPTION_KEY)\n  tenant_id     — e.g. BLDK\n  company_id    — e.g. BLDK-MAIN\n  branch_id     — e.g. BLDK-LON\n  user_id       — e.g. dev-user-001\n\nAfter running: access_token is set in your environment. The request itself hits GET /api/v1/hello-world on the Shell API to confirm the token is accepted.",
+      "description": "Generates a signed JWT from your environment variables and stores it as access_token. Run this first before making authenticated requests to any Nova API service.\n\nRequired environment variables (set in 'Nova Local Dev' environment):\n  jwt_secret    — plaintext JWT secret (decrypt from appsettings.json using ENCRYPTION_KEY)\n  tenant_id     — e.g. BLDK\n  company_id    — e.g. BLDK-MAIN\n  branch_id     — e.g. BLDK-LON\n  user_id       — e.g. dev-user-001\n\nAfter running: access_token is set in your environment. The request itself hits POST /api/v1/echo on Shell.Api (RequireAuthorization) to confirm the token is accepted — a 200 proves JWT auth works end-to-end.",
       "item": [
         {
           "name": "Generate Dev JWT + Verify",
@@ -114,20 +114,28 @@
             }
           ],
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [
               {
                 "key": "Authorization",
                 "value": "Bearer {{access_token}}",
                 "description": "Set by the pre-request script above."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
-            "url": {
-              "raw": "{{shell_base_url}}/api/v1/hello-world",
-              "host": ["{{shell_base_url}}"],
-              "path": ["api", "v1", "hello-world"]
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\":        \"{{tenant_id}}\",\n  \"company_id\":       \"{{company_id}}\",\n  \"branch_id\":        \"{{branch_id}}\",\n  \"user_id\":          \"{{user_id}}\",\n  \"browser_locale\":   \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\":          \"auth-verify\"\n}"
             },
-            "description": "Hits GET /api/v1/hello-world on the Shell API to confirm the generated token is accepted. A 200 means the token is valid. A 401 means jwt_secret is wrong."
+            "url": {
+              "raw": "{{shell_base_url}}/api/v1/echo",
+              "host": ["{{shell_base_url}}"],
+              "path": ["api", "v1", "echo"]
+            },
+            "description": "Hits POST /api/v1/echo on Shell.Api (RequireAuthorization) to confirm the generated token is accepted by the JWT middleware. A 200 means the token is valid. A 401 means jwt_secret is wrong — hello-world is anonymous and would always return 200 regardless."
           },
           "response": [
             {
@@ -140,15 +148,22 @@
                 { "key": "X-Correlation-ID", "value": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
               ],
               "originalRequest": {
-                "method": "GET",
-                "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{access_token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"BLDK-MAIN\",\n  \"branch_id\": \"BLDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\": \"auth-verify\"\n}"
+                },
                 "url": {
-                  "raw": "{{shell_base_url}}/api/v1/hello-world",
+                  "raw": "{{shell_base_url}}/api/v1/echo",
                   "host": ["{{shell_base_url}}"],
-                  "path": ["api", "v1", "hello-world"]
+                  "path": ["api", "v1", "echo"]
                 }
               },
-              "body": "{\n  \"message\": \"Hello, World!\",\n  \"timestamp\": \"2026-04-03T10:00:00+00:00\",\n  \"correlation_id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\"\n}"
+              "body": "{\n  \"echo\": \"auth-verify\",\n  \"received_at\": \"2026-04-03T10:00:00+00:00\",\n  \"correlation_id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\"\n}"
             },
             {
               "name": "401 Unauthorised — Wrong secret",
@@ -159,12 +174,19 @@
                 { "key": "Content-Type", "value": "application/problem+json" }
               ],
               "originalRequest": {
-                "method": "GET",
-                "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{access_token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"BLDK-MAIN\",\n  \"branch_id\": \"BLDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\": \"auth-verify\"\n}"
+                },
                 "url": {
-                  "raw": "{{shell_base_url}}/api/v1/hello-world",
+                  "raw": "{{shell_base_url}}/api/v1/echo",
                   "host": ["{{shell_base_url}}"],
-                  "path": ["api", "v1", "hello-world"]
+                  "path": ["api", "v1", "echo"]
                 }
               },
               "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.2\",\n  \"title\": \"Unauthorized\",\n  \"status\": 401\n}"

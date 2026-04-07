@@ -1,0 +1,15 @@
+{
+  "$schema": "https://xunit.net/schema/current/xunit.runner.schema.json",
+
+  // Emit xUnit framework messages (test started, passed, failed, skipped) to the
+  // test output stream. These appear in the TRX file and in dotnet test console output.
+  "diagnosticMessages": true,
+
+  // Internal xUnit framework diagnostics — only needed when debugging the runner itself.
+  "internalDiagnosticMessages": false,
+
+  // Run test collections sequentially. Prevents interleaved log lines across test classes,
+  // making the JSON and text log files coherent for AI-assisted review.
+  "parallelizeAssembly": false,
+  "parallelizeTestCollections": false
+}

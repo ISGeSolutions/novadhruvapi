@@ -1900,7 +1900,7 @@ BookingResponse response = new(
 
 ## Distributed Locking
 
-> **New to distributed locking?** Read `planning/ainotes/distributed-locking-guide.md` first.
+> **New to distributed locking?** Read `docs/distributed-locking-guide.md` first.
 > It covers the problem from first principles, the unique token, the Lua script, `await using`,
 > common mistakes, debugging with `redis-cli`, and a pre-merge checklist.
 > This section is the quick reference — the guide is the learning resource.
@@ -2341,11 +2341,11 @@ Keep: `Program.cs` startup order (just add/remove health checks for your DB type
 
 | File | Purpose |
 |---|---|
-| `planning/ainotes/running-and-testing.md` | How to run and Postman testing guide |
+| `src/services/Nova.Shell.Api/docs/shell-api-postman-testing.md` | How to run and Postman testing guide |
 | `planning/ainotes/conversation-context.md` | Architecture decisions and full project context |
 | `planning/ainotes/acceptance-criteria.md` | Verification checklist |
 | `src/services/Nova.Shell.Api/Endpoints/EchoEndpoint.cs` | Annotated reference: validation + Problem Details |
 | `src/services/Nova.Shell.Api/Endpoints/EchoListEndpoint.cs` | Annotated reference: pagination contract |
 | `src/services/Nova.Shell.Api/Endpoints/HttpPingEndpoint.cs` | Annotated reference: resilient HttpClient |
 | `src/services/Nova.Shell.Api/Endpoints/TestInternalAuthEndpoint.cs` | Dev diagnostic: service-to-service auth |
-| `planning/ainotes/distributed-locking-guide.cs` | 14-section guide to distributed locking (new devs) |
+| `docs/distributed-locking-guide.md` | 14-section guide to distributed locking (new devs) |

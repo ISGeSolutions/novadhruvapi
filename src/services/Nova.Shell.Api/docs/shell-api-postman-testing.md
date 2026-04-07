@@ -161,7 +161,7 @@ Set breakpoints in any `.cs` file and press **F5** to hit them. All configuratio
 
 ### One-time setup
 
-1. Import all three files from `planning/postman/`:
+1. Import all three files from `postman/`:
    - `Nova.Auth.postman_collection.json` — JWT token generator
    - `Nova.Shell.Api.postman_collection.json` — all Shell API endpoints
    - `Nova.Local.Dev.postman_environment.json` — pre-configured environment
@@ -169,7 +169,7 @@ Set breakpoints in any `.cs` file and press **F5** to hit them. All configuratio
 3. Select **Nova — Local Dev** from the environment dropdown.
 4. Run **Generate Dev JWT + Verify** in the Auth collection — this stores `access_token` automatically.
 
-For the full step-by-step test plan see `planning/postman/Nova.Shell.Api.testing-guide.md`.
+For the full step-by-step test plan see `postman/Nova.Shell.Api.testing-guide.md`.
 
 ### Endpoints
 
@@ -310,7 +310,7 @@ To force an error response from the Postman mock server (not the real API), add:
 | `x-mock-response-name` | e.g. `503 Service Unavailable — Connection failed` |
 | `x-mock-response-code` | e.g. `503` |
 
-See `planning/postman/MockServer-Setup.md` for the full list of available mock responses.
+See `postman/MockServer-Setup.md` for the full list of available mock responses.
 
 ---
 

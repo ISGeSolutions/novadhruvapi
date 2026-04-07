@@ -11,4 +11,10 @@
     <Project Path="src/shared/Nova.Shared.Web/Nova.Shared.Web.csproj" />
     <Project Path="src/shared/Nova.Shared/Nova.Shared.csproj" />
   </Folder>
+  <Folder Name="/src/tests/">
+    <Project Path="src/tests/Nova.Shell.Api.Tests/Nova.Shell.Api.Tests.csproj" />
+  </Folder>
+  <Folder Name="/src/tools/">
+    <Project Path="src/tools/Nova.Cipher/Nova.Cipher.csproj" />
+  </Folder>
 </Solution>

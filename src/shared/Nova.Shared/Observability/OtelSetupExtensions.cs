@@ -26,7 +26,9 @@ public static class OtelSetupExtensions
         ((IConfiguration)builder.Configuration).Bind(appSettings);
 
         string serviceName = appSettings.OpenTelemetry.ServiceName;
-        string otlpEndpoint = appSettings.OpenTelemetry.OtlpEndpoint;
+        // Prefer Aspire-injected OTEL_EXPORTER_OTLP_ENDPOINT env var; fall back to appsettings.
+        string otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
+                              ?? appSettings.OpenTelemetry.OtlpEndpoint;
         string version = typeof(OtelSetupExtensions).Assembly.GetName().Version?.ToString() ?? "0.0.0";
 
         ResourceBuilder resource = ResourceBuilder.CreateDefault()

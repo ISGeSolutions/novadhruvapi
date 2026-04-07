@@ -11,5 +11,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\services\Nova.Shell.Api\Nova.Shell.Api.csproj" />
+    <ProjectReference Include="..\..\services\Nova.ToDo.Api\Nova.ToDo.Api.csproj" />
   </ItemGroup>
 </Project>

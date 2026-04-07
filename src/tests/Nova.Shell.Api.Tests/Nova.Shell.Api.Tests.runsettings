@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Run settings for Nova.Shell.Api.Tests.
+  Picked up automatically by 'dotnet test' when this file is in the project directory,
+  or pass explicitly: dotnet test ‑‑settings Nova.Shell.Api.Tests.runsettings
+
+  Output locations (relative to project root):
+    TestResults/shell-api-tests.trx       — machine-readable test results (XML/TRX format)
+    TestResults/Logs/shell-api-test-*.json — structured JSON application log (AI-parseable)
+    TestResults/Logs/shell-api-test-*.log  — plain-text application log (human-readable)
+-->
+<RunSettings>
+  <RunConfiguration>
+    <!-- TRX and log files land in TestResults/ inside the project directory. -->
+    <ResultsDirectory>TestResults</ResultsDirectory>
+
+    <!-- Disable parallel execution so log entries appear in request order.
+         Parallel runs interleave log lines, making AI diagnosis harder. -->
+    <MaxCpuCount>1</MaxCpuCount>
+  </RunConfiguration>
+
+  <LoggerRunSettings>
+    <Loggers>
+      <!-- TRX: standard .NET test result format. Contains test names, outcomes,
+           durations, failure messages, and stack traces for every test in the run.
+           AI log review should start here to identify which tests failed. -->
+      <Logger friendlyName="trx" enabled="true">
+        <Configuration>
+          <LogFileName>shell-api-tests.trx</LogFileName>
+        </Configuration>
+      </Logger>
+    </Loggers>
+  </LoggerRunSettings>
+</RunSettings>

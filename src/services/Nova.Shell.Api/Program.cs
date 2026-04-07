@@ -174,14 +174,26 @@ RunMigrationsEndpoint.Map(app);
 TenantDbHealthEndpoint.Map(app);
 
 // Health check endpoints
-app.MapHealthChecks("/health");
-app.MapHealthChecks("/health/redis",    new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+// ResponseWriter returns {"status": "Healthy|Unhealthy|Degraded"} so callers can parse JSON.
+static Task WriteJsonHealthResponse(HttpContext ctx, Microsoft.Extensions.Diagnostics.HealthChecks.HealthReport report)
 {
-    Predicate = check => check.Name == "redis"
+    ctx.Response.ContentType = "application/json; charset=utf-8";
+    return ctx.Response.WriteAsync($"{{\"status\":\"{report.Status}\"}}");
+}
+
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = WriteJsonHealthResponse
+});
+app.MapHealthChecks("/health/redis", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate      = check => check.Name == "redis",
+    ResponseWriter = WriteJsonHealthResponse
 });
 app.MapHealthChecks("/health/rabbitmq", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
-    Predicate = check => check.Tags.Contains("rabbitmq")
+    Predicate      = check => check.Tags.Contains("rabbitmq"),
+    ResponseWriter = WriteJsonHealthResponse
 });
 // Per-tenant DB health: GET /health/db/{tenantId}
 

@@ -5,7 +5,7 @@ Applies to all Nova API service Postman collections (e.g. Nova.ToDo.Api, Nova.Ac
 Each service ships a single collection file:
 
 ```
-planning/postman/Nova.<service-name>.Api.postman_collection.json
+postman/Nova.<service-name>.Api.postman_collection.json
 ```
 
 This file serves two purposes:

@@ -429,3 +429,5 @@ FodyWeavers.xsd
 
 *.log
 .DS_Store
+# Test results and logs
+TestResults/

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Nova.Shell.Api",
-    "description": "Reference implementation for Nova platform API services.\n\nNova.Shell.Api demonstrates all platform conventions: project structure, middleware pipeline, JWT auth, tenant resolution, snake_case JSON, Problem Details error responses, input validation, health checks, Redis caching, distributed locking, service-to-service auth, DbUp migrations, and outbox relay.\n\nThis collection is the single source of truth \u2014 it serves two purposes:\n  1. API reference: run against a locally running Nova.Shell.Api (baseUrl = http://localhost:5100)\n  2. Mock server: import into Postman and create a Mock Server\n\n---\n\nAuthentication\n\n  Authenticated endpoints (POST /echo, POST /echo/list) need a JWT.\n  Use the Nova \u2014 Auth (Dev Token Generator) collection to generate access_token first,\n  then this collection will automatically attach it as a Bearer token.\n\n  Import: planning/postman/Nova.Auth.postman_collection.json\n\n---\n\nMock Server Workflow\n\n  1. Import this collection into Postman.\n  2. Right-click the collection \u2192 Mock Servers \u2192 Create Mock Server.\n  3. Copy the generated mock URL (e.g. https://abc123.mock.pstmn.io).\n  4. Update the baseUrl collection variable to the mock URL.\n  5. Send any request \u2014 Postman returns the first saved example by default (the 200 case).\n\n  To request a specific response from the mock, add this header:\n    x-mock-response-name: <exact name of the saved example>\n\nSee planning/ainotes/running-and-testing.md for the full testing guide.",
+    "description": "Reference implementation for Nova platform API services.\n\nNova.Shell.Api demonstrates all platform conventions: project structure, middleware pipeline, JWT auth, tenant resolution, snake_case JSON, Problem Details error responses, input validation, health checks, Redis caching, distributed locking, service-to-service auth, DbUp migrations, and outbox relay.\n\nThis collection is the single source of truth \u2014 it serves two purposes:\n  1. API reference: run against a locally running Nova.Shell.Api (baseUrl = http://localhost:5100)\n  2. Mock server: import into Postman and create a Mock Server\n\n---\n\nAuthentication\n\n  Authenticated endpoints (POST /echo, POST /echo/list) need a JWT.\n  Use the Nova \u2014 Auth (Dev Token Generator) collection to generate access_token first,\n  then this collection will automatically attach it as a Bearer token.\n\n  Import: postman/Nova.Auth.postman_collection.json\n\n---\n\nMock Server Workflow\n\n  1. Import this collection into Postman.\n  2. Right-click the collection \u2192 Mock Servers \u2192 Create Mock Server.\n  3. Copy the generated mock URL (e.g. https://abc123.mock.pstmn.io).\n  4. Update the baseUrl collection variable to the mock URL.\n  5. Send any request \u2014 Postman returns the first saved example by default (the 200 case).\n\n  To request a specific response from the mock, add this header:\n    x-mock-response-name: <exact name of the saved example>\n\nSee src/services/Nova.Shell.Api/docs/shell-api-postman-testing.md for the full testing guide.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -14,12 +14,120 @@
       }
     ]
   },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// -----------------------------------------------------------------------",
+          "// Nova.Shell.Api — Auto JWT",
+          "// Generates a fresh HS256 token if none exists or the existing one is",
+          "// within 60 seconds of expiry. Reads from environment / collection vars.",
+          "// Required variables: jwt_secret, tenant_id, company_id, branch_id, user_id",
+          "// Optional variables: jwt_issuer (default: https://auth.nova.internal)",
+          "//                     jwt_audience (default: nova-api)",
+          "// -----------------------------------------------------------------------",
+          "",
+          "// Skip token generation for anonymous endpoints (hello-world, health/*)",
+          "const url = pm.request.url.toString();",
+          "if (url.includes('/hello-world') || url.includes('/health/')) {",
+          "    return;",
+          "}",
+          "",
+          "// Reuse the existing token if it is still valid (60 s buffer).",
+          "const existing = pm.variables.get('access_token');",
+          "if (existing) {",
+          "    try {",
+          "        const parts = existing.split('.');",
+          "        if (parts.length === 3) {",
+          "            const padded  = parts[1].replace(/-/g, '+').replace(/_/g, '/');",
+          "            const decoded = JSON.parse(CryptoJS.enc.Utf8.stringify(",
+          "                CryptoJS.enc.Base64.parse(padded)",
+          "            ));",
+          "            const now = Math.floor(Date.now() / 1000);",
+          "            if (decoded.exp && decoded.exp > now + 60) {",
+          "                console.log('[Nova.Shell] access_token still valid — skipping refresh.');",
+          "                return;",
+          "            }",
+          "        }",
+          "    } catch (_) { /* malformed token — fall through to regenerate */ }",
+          "}",
+          "",
+          "// Validate required variables are present.",
+          "const required = ['jwt_secret', 'tenant_id', 'company_id', 'branch_id', 'user_id'];",
+          "for (const key of required) {",
+          "    if (!pm.variables.get(key)) {",
+          "        throw new Error('[Nova.Shell] Missing variable: ' + key +",
+          "            '. Add it to your active environment or collection variables.');",
+          "    }",
+          "}",
+          "",
+          "// Build and sign the JWT.",
+          "const base64url = (obj) =>",
+          "    CryptoJS.enc.Base64",
+          "        .stringify(CryptoJS.enc.Utf8.parse(JSON.stringify(obj)))",
+          "        .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
+          "",
+          "const now = Math.floor(Date.now() / 1000);",
+          "",
+          "const header  = base64url({ alg: 'HS256', typ: 'JWT' });",
+          "const payload = base64url({",
+          "    iss:        pm.variables.get('jwt_issuer')   || 'https://auth.nova.internal',",
+          "    aud:        pm.variables.get('jwt_audience') || 'nova-api',",
+          "    sub:        pm.variables.get('user_id'),",
+          "    tenant_id:  pm.variables.get('tenant_id'),",
+          "    company_id: pm.variables.get('company_id'),",
+          "    branch_id:  pm.variables.get('branch_id'),",
+          "    user_id:    pm.variables.get('user_id'),",
+          "    iat: now,",
+          "    exp: now + 3600",
+          "});",
+          "",
+          "const signingInput = header + '.' + payload;",
+          "const rawSig       = CryptoJS.HmacSHA256(signingInput, pm.variables.get('jwt_secret'));",
+          "const signature    = CryptoJS.enc.Base64.stringify(rawSig)",
+          "    .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
+          "",
+          "const token = signingInput + '.' + signature;",
+          "",
+          "// Write to collection variables (takes precedence over globals).",
+          "// Also write to environment if one is active.",
+          "pm.collectionVariables.set('access_token', token);",
+          "try { pm.environment.set('access_token', token); } catch (_) {}",
+          "",
+          "console.log('[Nova.Shell] access_token refreshed.');",
+          "console.log('  tenant_id: ' + pm.variables.get('tenant_id'));",
+          "console.log('  user_id:   ' + pm.variables.get('user_id'));",
+          "console.log('  expires:   ' + new Date((now + 3600) * 1000).toISOString());"
+        ]
+      }
+    }
+  ],
   "variable": [
     {
       "key": "baseUrl",
       "value": "http://localhost:5100",
       "type": "string",
       "description": "Base URL. Local dev: http://localhost:5100. Mock server: replace with Postman Mock URL."
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT Bearer token. Auto-generated by the collection pre-request script."
+    },
+    {
+      "key": "jwt_issuer",
+      "value": "https://auth.nova.internal",
+      "type": "string",
+      "description": "Must match Jwt.Issuer in appsettings.json."
+    },
+    {
+      "key": "jwt_audience",
+      "value": "nova-api",
+      "type": "string",
+      "description": "Must match Jwt.Audience in appsettings.json."
     },
     {
       "key": "tenant_id",

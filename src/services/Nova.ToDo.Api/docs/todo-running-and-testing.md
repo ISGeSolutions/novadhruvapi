@@ -121,6 +121,21 @@ dotnet build src/services/Nova.ToDo.Api/Nova.ToDo.Api.csproj
 
 Expected: `0 Warning(s). 0 Error(s).`
 
+### Running via Aspire (recommended for local dev)
+
+Run all Nova services together from the repo root using the AppHost:
+
+```bash
+export ENCRYPTION_KEY=your-dev-key
+aspire run
+```
+
+This starts `Nova.AppHost` (`src/host/Nova.AppHost/`), which launches Nova.ToDo.Api alongside all other registered services. The Aspire dashboard opens automatically — OTLP traces from all services route to it without any manual config.
+
+Nova.ToDo.Api still listens on **`http://localhost:5101`**. All health check and Postman instructions below apply unchanged.
+
+> Aspire is dev-only. Production uses Docker Compose / Kubernetes.
+
 ---
 
 ## Health Checks
@@ -231,7 +246,7 @@ The `tenant_id` in the request body must match the `tenant_id` claim in the JWT.
 The Postman collection is at:
 
 ```
-planning/postman/Nova.ToDo.Api.postman_collection.json
+postman/Nova.ToDo.Api.postman_collection.json
 ```
 
 Import into Postman (File → Import). The collection contains all 21 endpoints with example request bodies and 118 response examples covering success and error cases.

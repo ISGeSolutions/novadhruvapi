@@ -8,4 +8,8 @@ builder.AddProject<Projects.Nova_Shell_Api>("shell")
        .WithReference(redis)
        .WaitFor(redis);
 
+builder.AddProject<Projects.Nova_ToDo_Api>("todo")
+       .WithReference(redis)
+       .WaitFor(redis);
+
 builder.Build().Run();
