@@ -123,7 +123,7 @@ public static class EchoListEndpoint
     // ---------------------------------------------------------------------------
     // Request — inherits all 9 standard fields (7 context + page_number + page_size).
     // Wire format includes:
-    //   "tenant_id", "company_id", "branch_id", "user_id",
+    //   "tenant_id", "company_code", "branch_code", "user_id",
     //   "browser_locale", "browser_timezone", "ip_address",
     //   "page_number", "page_size",
     //   "filter"  ← domain-specific optional filter

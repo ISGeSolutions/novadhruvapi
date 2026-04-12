@@ -27,7 +27,7 @@ Key sections to fill in before first run:
 {
   "Tenants": [
     {
-      "TenantId":         "BLDK",
+      "TenantId":         "BTDK",
       "DisplayName":      "Blixen Tours",
       "DbType":           "MsSql",
       "ConnectionString": "<encrypted-mssql-connection-string>",
@@ -151,14 +151,14 @@ Example:
 
 ```bash
 curl http://localhost:5101/health
-curl http://localhost:5101/health/db/BLDK
+curl http://localhost:5101/health/db/BTDK
 ```
 
 A healthy DB response:
 
 ```json
 {
-  "tenant_id":  "BLDK",
+  "tenant_id":  "BTDK",
   "db_type":    "MsSql",
   "status":     "healthy",
   "latency_ms": 4
@@ -180,7 +180,7 @@ curl -X POST http://localhost:5101/admin/migrations/run
 ### Run migrations for a single tenant
 
 ```bash
-curl -X POST "http://localhost:5101/admin/migrations/run?tenantId=BLDK"
+curl -X POST "http://localhost:5101/admin/migrations/run?tenantId=BTDK"
 ```
 
 Example response:
@@ -189,7 +189,7 @@ Example response:
 {
   "migrations": [
     {
-      "tenant_id":       "BLDK",
+      "tenant_id":       "BTDK",
       "applied":         ["V001__CreateToDo.sql"],
       "blocked":         [],
       "blocked_scripts": []
@@ -227,7 +227,7 @@ Every request body must also include the `RequestContext` fields that the fronte
 
 ```json
 {
-  "tenant_id":        "BLDK",
+  "tenant_id":        "BTDK",
   "company_id":       "BLX",
   "branch_id":        "HQ",
   "user_id":          "JD",
@@ -256,7 +256,7 @@ Import into Postman (File → Import). The collection contains all 21 endpoints 
 | Variable | Value |
 |---|---|
 | `base_url` | `http://localhost:5101` |
-| `tenant_id` | `BLDK` (or your test tenant) |
+| `tenant_id` | `BTDK` (or your test tenant) |
 | `jwt_token` | A valid signed JWT for the tenant |
 
 ### Recommended test order
@@ -265,7 +265,7 @@ Run in this sequence to build up state correctly:
 
 1. `GET /api/v1/hello` — confirm service is live
 2. `POST /admin/migrations/run` — apply DB schema
-3. `GET /health/db/BLDK` — confirm DB connectivity
+3. `GET /health/db/BTDK` — confirm DB connectivity
 4. `POST /api/v1/todos` — **Create** — note the returned `seq_no`
 5. `POST /api/v1/todos/{seq_no}` — **GetBySeqNo** — verify full record
 6. `POST /api/v1/todos/{seq_no}/update` — **Update** — pass `updated_on` from step 5

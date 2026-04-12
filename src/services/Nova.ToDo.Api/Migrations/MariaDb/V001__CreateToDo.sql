@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS `todo` (
     `created_on`            DATETIME      NOT NULL,
     `updated_by`            VARCHAR(10)   NOT NULL,
     `updated_on`            DATETIME      NOT NULL,
-    `updated_at`            VARCHAR(20)   NOT NULL,
+    `updated_at`            VARCHAR(50)   NOT NULL,
 
     PRIMARY KEY (`seq_no`),
     INDEX `ix_todo_assigned_to_user` (`assigned_to_user_code`, `done_ind`, `frz_ind`),

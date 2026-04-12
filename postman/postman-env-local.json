@@ -10,28 +10,28 @@
     },
     {
       "key": "tenant_id",
-      "value": "BLDK",
+      "value": "BTDK",
       "type": "default",
       "enabled": true,
       "description": "Tenant to impersonate. Must match a TenantId entry in appsettings.json Tenants array."
     },
     {
-      "key": "company_id",
-      "value": "BLDK-MAIN",
+      "key": "company_code",
+      "value": "BTDK",
       "type": "default",
       "enabled": true,
       "description": "Company within the tenant."
     },
     {
-      "key": "branch_id",
-      "value": "BLDK-LON",
+      "key": "branch_code",
+      "value": "DK",
       "type": "default",
       "enabled": true,
       "description": "Branch within the company."
     },
     {
       "key": "user_id",
-      "value": "dev-user-001",
+      "value": "ISG",
       "type": "default",
       "enabled": true,
       "description": "Developer user identifier. Appears as the JWT sub and user_id claims."
@@ -56,6 +56,20 @@
       "type": "default",
       "enabled": true,
       "description": "Nova.ToDo.Api listen address. Matches Kestrel:Endpoints:Http:Url in appsettings.json."
+    },
+    {
+      "key": "commonux_base_url",
+      "value": "http://localhost:5102",
+      "type": "default",
+      "enabled": true,
+      "description": "Nova.CommonUX.Api listen address. Matches Kestrel:Endpoints:Http:Url in appsettings.json."
+    },
+    {
+      "key": "presets_base_url",
+      "value": "http://localhost:5103",
+      "type": "default",
+      "enabled": true,
+      "description": "Nova.Presets.Api listen address. Matches Kestrel:Endpoints:Http:Url in appsettings.json."
     }
   ],
   "_postman_variable_scope": "environment"

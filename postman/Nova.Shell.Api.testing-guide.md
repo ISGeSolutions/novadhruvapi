@@ -40,7 +40,7 @@ After importing `Nova.Local.Dev.postman_environment.json`, open the environment 
 | Variable | Action |
 |---|---|
 | `jwt_secret` | Enter your plaintext JWT secret — decrypt `appsettings.json` → `Jwt.SecretKey` using your `ENCRYPTION_KEY`. Never commit this value. |
-| `tenant_id` / `company_id` / `branch_id` / `user_id` | Pre-filled with BLDK defaults — change if your test tenant differs. |
+| `tenant_id` / `company_id` / `branch_id` / `user_id` | Pre-filled with BTDK defaults — change if your test tenant differs. |
 
 Select **Nova — Local Dev** from the environment dropdown (top-right) before running any requests.
 

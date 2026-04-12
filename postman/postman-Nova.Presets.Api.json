@@ -1,0 +1,994 @@
+{
+  "info": {
+    "name": "Nova.Presets.Api",
+    "description": "User profile, branches, access levels and lookup lists",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5103",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// -----------------------------------------------------------------------",
+          "// Nova.Presets.Api \u2014 Auto JWT",
+          "// Generates a fresh HS256 token if none exists or the existing one is",
+          "// within 60 seconds of expiry. Reads from environment / collection vars.",
+          "// Required variables: jwt_secret, tenant_id, company_code, branch_code, user_id",
+          "// Optional variables: jwt_issuer (default: https://auth.nova.internal)",
+          "//                     jwt_audience (default: nova-api)",
+          "// -----------------------------------------------------------------------",
+          "",
+          "// Skip token generation for anonymous endpoints.",
+          "const url = pm.request.url.toString();",
+          "if (url.includes('/hello') || url.includes('/health') || url.includes('/confirm-password-change')) {",
+          "    return;",
+          "}",
+          "",
+          "// Reuse the existing token if it is still valid (60 s buffer).",
+          "const existing = pm.variables.get('access_token');",
+          "if (existing) {",
+          "    try {",
+          "        const parts = existing.split('.');",
+          "        if (parts.length === 3) {",
+          "            const padded  = parts[1].replace(/-/g, '+').replace(/_/g, '/');",
+          "            const decoded = JSON.parse(CryptoJS.enc.Utf8.stringify(",
+          "                CryptoJS.enc.Base64.parse(padded)",
+          "            ));",
+          "            const now = Math.floor(Date.now() / 1000);",
+          "            if (decoded.exp && decoded.exp > now + 60) {",
+          "                console.log('[Nova.Presets] access_token still valid \u2014 skipping refresh.');",
+          "                return;",
+          "            }",
+          "        }",
+          "    } catch (_) { /* malformed token \u2014 fall through to regenerate */ }",
+          "}",
+          "",
+          "// Validate required variables are present.",
+          "const required = ['jwt_secret', 'tenant_id', 'company_code', 'branch_code', 'user_id'];",
+          "for (const key of required) {",
+          "    if (!pm.variables.get(key)) {",
+          "        throw new Error('[Nova.Presets] Missing variable: ' + key +",
+          "            '. Add it to your active environment or collection variables.');",
+          "    }",
+          "}",
+          "",
+          "// Build and sign the JWT.",
+          "const base64url = (obj) =>",
+          "    CryptoJS.enc.Base64",
+          "        .stringify(CryptoJS.enc.Utf8.parse(JSON.stringify(obj)))",
+          "        .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
+          "",
+          "const now = Math.floor(Date.now() / 1000);",
+          "",
+          "const header  = base64url({ alg: 'HS256', typ: 'JWT' });",
+          "const payload = base64url({",
+          "    iss:        pm.variables.get('jwt_issuer')   || 'https://auth.nova.internal',",
+          "    aud:        pm.variables.get('jwt_audience') || 'nova-api',",
+          "    sub:        pm.variables.get('user_id'),",
+          "    tenant_id:  pm.variables.get('tenant_id'),",
+          "    company_code: pm.variables.get('company_code'),",
+          "    branch_code:  pm.variables.get('branch_code'),",
+          "    user_id:    pm.variables.get('user_id'),",
+          "    iat: now,",
+          "    exp: now + 3600",
+          "});",
+          "",
+          "const signingInput = header + '.' + payload;",
+          "const rawSig       = CryptoJS.HmacSHA256(signingInput, pm.variables.get('jwt_secret'));",
+          "const signature    = CryptoJS.enc.Base64.stringify(rawSig)",
+          "    .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
+          "",
+          "const token = signingInput + '.' + signature;",
+          "",
+          "// Write to collection variables (takes precedence over globals).",
+          "// Also write to environment if one is active.",
+          "pm.collectionVariables.set('access_token', token);",
+          "try { pm.environment.set('access_token', token); } catch (_) {}",
+          "",
+          "console.log('[Nova.Presets] access_token refreshed.');",
+          "console.log('  tenant_id: ' + pm.variables.get('tenant_id'));",
+          "console.log('  user_id:   ' + pm.variables.get('user_id'));",
+          "console.log('  expires:   ' + new Date((now + 3600) * 1000).toISOString());"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "User Profile",
+      "item": [
+        {
+          "name": "Fetch Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user-profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user-profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\"\n}"
+            },
+            "description": "Fetch the current user's profile including status information."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"user_id\": \"user-123\",\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"avatar_url\": \"https://cdn.example.com/avatars/user-123.jpg\",\n  \"status_id\": \"available\",\n  \"status_label\": \"Available\",\n  \"status_note\": \"Reviewing bookings\"\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"tenant_id\", \"message\": \"Required\" },\n    { \"field\": \"user_id\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Upload Avatar",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user-profile/avatar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user-profile",
+                "avatar"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": "",
+                  "description": "Image file (JPEG, PNG, etc.)"
+                }
+              ]
+            },
+            "description": "Upload a new avatar image. Uses multipart/form-data (not JSON). Authorization header is required."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"avatar_url\": \"https://cdn.example.com/avatars/user-123.jpg\"\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"avatar\", \"message\": \"Required. Must be a JPEG, PNG, or WebP image under 5 MB\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Status Options",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user-profile/status-options",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user-profile",
+                "status-options"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\"\n}"
+            },
+            "description": "Returns the tenant/company/branch-scoped list of presence status options from the database. Most specific scope wins when the same status_code exists at multiple levels (tenant-wide \u2192 company-wide \u2192 branch-specific)."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  { \"status_code\": \"available\",     \"label\": \"Available\",      \"colour\": \"#22c55e\" },\n  { \"status_code\": \"busy\",          \"label\": \"Busy\",            \"colour\": \"#ef4444\" },\n  { \"status_code\": \"in-meeting\",    \"label\": \"In a Meeting\",    \"colour\": \"#f59e0b\" },\n  { \"status_code\": \"out-of-office\", \"label\": \"Out of Office\",   \"colour\": \"#6b7280\" },\n  { \"status_code\": \"dnd\",           \"label\": \"Do Not Disturb\",  \"colour\": \"#dc2626\" }\n]"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"tenant_id\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user-profile/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user-profile",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status_id\": \"in-meeting\",\n  \"status_note\": \"Client call until 3pm\",\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\"\n}"
+            },
+            "description": "Update the user's activity status and optional status note."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"user_id\": \"user-123\",\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"avatar_url\": \"https://cdn.example.com/avatars/user-123.jpg\",\n  \"status_id\": \"in-meeting\",\n  \"status_label\": \"In a Meeting\",\n  \"status_note\": \"Client call until 3pm\"\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"status_id\", \"message\": \"Required. Must be a valid status option ID\" },\n    { \"field\": \"status_note\", \"message\": \"Must be 200 characters or fewer\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user-profile/change-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user-profile",
+                "change-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"current-password\",\n  \"new_password\": \"new-secure-password\",\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\"\n}"
+            },
+            "description": "Request a password change. The API sends a confirmation email \u2014 the new password only takes effect after the user clicks the confirmation link."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"A confirmation email has been sent to your registered email address. Your new password will take effect once you confirm via the email link.\"\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"current_password\", \"message\": \"Required\" },\n    { \"field\": \"new_password\", \"message\": \"Must be at least 8 characters with one uppercase, one lowercase, and one number\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Confirm Password Change",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user-profile/confirm-password-change",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user-profile",
+                "confirm-password-change"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"<token from email link query string>\"\n}"
+            },
+            "description": "Confirms a pending password change. No Bearer token required \u2014 this is called by the frontend after the user clicks the email confirmation link. Extract the token query param from the link and POST it here."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Your password has been updated successfully.\"\n}"
+            },
+            {
+              "name": "400 Invalid or Expired Token",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/problem+json"
+                }
+              ],
+              "body": "{\n  \"type\": \"https://tools.ietf.org/html/rfc9110#section-15.5.1\",\n  \"title\": \"Bad request\",\n  \"detail\": \"Invalid or expired confirmation token.\",\n  \"status\": 400\n}"
+            },
+            {
+              "name": "422 Missing Token",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/problem+json"
+                }
+              ],
+              "body": "{\n  \"errors\": { \"token\": [\"token is required.\"] }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Configuration",
+      "item": [
+        {
+          "name": "Branches",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/branches",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "branches"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\"\n}"
+            },
+            "description": "Fetch list of branches for the current tenant."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  { \"branch_code\": \"LON\", \"branch_name\": \"London\", \"company_code\": \"MAIN\", \"company_name\": \"Main Company\" },\n  { \"branch_code\": \"MAN\", \"branch_name\": \"Manchester\", \"company_code\": \"MAIN\", \"company_name\": \"Main Company\" }\n]"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"tenant_id\", \"message\": \"Required\" },\n    { \"field\": \"company_code\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "User Management",
+      "item": [
+        {
+          "name": "Set Default Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user/default-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "default-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"target_user_id\": \"{{target_user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\"\n}"
+            },
+            "description": "Admin-only. Sets the target user's password to the default (changeMe@ddMMM, e.g. changeMe@11Apr) hashed via Argon2id. Also sets must_change_password = true, clears failed_login_count and locked_until. target_user_id is the user whose password is being reset \u2014 distinct from user_id (the calling admin). Target user must have an active profile."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Default password set. User must change password on next login.\"\n}"
+            },
+            {
+              "name": "404 Not Found \u2014 target user profile not found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"title\": \"Not found\",\n  \"detail\": \"Target user profile not found.\",\n  \"status\": 404\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"title\": \"Validation failed\",\n  \"errors\": { \"target_user_id\": [\"target_user_id is required.\"] },\n  \"status\": 422\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"title\": \"Forbidden\",\n  \"detail\": \"tenant_id does not match the authenticated tenant.\",\n  \"status\": 403\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

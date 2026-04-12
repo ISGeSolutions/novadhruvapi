@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS sales97.todo (
     created_on            timestamptz   NOT NULL,
     updated_by            varchar(10)   NOT NULL,
     updated_on            timestamptz   NOT NULL,
-    updated_at            varchar(20)   NOT NULL,
+    updated_at            varchar(50)   NOT NULL,
 
     CONSTRAINT pk_todo PRIMARY KEY (id)
 );

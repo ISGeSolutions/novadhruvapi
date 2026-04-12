@@ -1,6 +1,6 @@
 {
   "Logging": {
-    "DefaultLevel": "Information",
+    "DefaultLevel": "Debug",
     "EnableRequestResponseLogging": false,
     "EnableDiagnosticLogging": true,
     "Windows": []

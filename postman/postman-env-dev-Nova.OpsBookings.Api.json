@@ -1,0 +1,8 @@
+{
+  "id": "dev-env-opsbookings",
+  "name": "Nova.OpsBookings.Api – Dev",
+  "_postman_variable_scope": "environment",
+  "values": [
+    { "key": "base_url", "value": "http://localhost:5105", "type": "default", "enabled": true }
+  ]
+}

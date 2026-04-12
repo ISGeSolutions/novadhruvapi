@@ -1,0 +1,8 @@
+{
+  "id": "staging-env-commonux",
+  "name": "Nova.CommonUX.Api – Staging",
+  "_postman_variable_scope": "environment",
+  "values": [
+    { "key": "base_url", "value": "https://staging-commonux-api.novadhruv.com", "type": "default", "enabled": true }
+  ]
+}

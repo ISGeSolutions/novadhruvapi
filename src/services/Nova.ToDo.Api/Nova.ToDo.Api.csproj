@@ -8,7 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Asp.Versioning.Http" Version="8.*" />
-    <PackageReference Include="Aspire.StackExchange.Redis" Version="9.*" />
+    <PackageReference Include="Aspire.StackExchange.Redis" Version="13.2.2" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\shared\Nova.Shared\Nova.Shared.csproj" />

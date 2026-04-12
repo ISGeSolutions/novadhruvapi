@@ -29,10 +29,10 @@ public record RequestContext
     public string TenantId { get; init; } = string.Empty;
 
     /// <summary>The company within the tenant that this request is scoped to.</summary>
-    public string CompanyId { get; init; } = string.Empty;
+    public string CompanyCode { get; init; } = string.Empty;
 
     /// <summary>The branch within the company that this request is scoped to.</summary>
-    public string BranchId { get; init; } = string.Empty;
+    public string BranchCode { get; init; } = string.Empty;
 
     /// <summary>The ID of the authenticated user making this request.</summary>
     public string UserId { get; init; } = string.Empty;

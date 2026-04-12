@@ -371,8 +371,8 @@ VALUES
 **Step 2 — Watch the logs** (within `PollingIntervalSeconds`, default 5 s):
 
 ```
-dbug: OutboxRelayWorker — 1 pending message(s) for tenant BLDK
-dbug: OutboxRelayWorker — sent <id> [nova.test/test.event] for tenant BLDK
+dbug: OutboxRelayWorker — 1 pending message(s) for tenant BTDK
+dbug: OutboxRelayWorker — sent <id> [nova.test/test.event] for tenant BTDK
 ```
 
 **Step 3 — Confirm the row is marked sent:**

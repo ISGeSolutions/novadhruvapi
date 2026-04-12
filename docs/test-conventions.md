@@ -85,6 +85,8 @@ Rules:
 `TestHost` is a **static class**, not a base class or fixture. It creates a
 `WebApplicationFactory<Program>` for the service under test with the minimum necessary overrides.
 
+### Standard pattern (no Redis, no email)
+
 ```csharp
 // Helpers/TestHost.cs
 public static class TestHost
@@ -97,8 +99,9 @@ public static class TestHost
                 builder.ConfigureServices(services =>
                 {
                     // Infrastructure-only override: replace the cipher so tests do not
-                    // need the ENCRYPTION_KEY environment variable. appsettings.Test.json
-                    // supplies plaintext values; PassthroughCipherService returns them as-is.
+                    // need the ENCRYPTION_KEY environment variable. The test project's
+                    // appsettings.json supplies plaintext values; PassthroughCipherService
+                    // returns them as-is.
                     services.AddSingleton<ICipherService, PassthroughCipherService>();
                 });
             });
@@ -118,10 +121,59 @@ public static class TestHost
 }
 ```
 
+### Extended pattern — when the service has an encrypted `Jwt:SecretKey` or sends email
+
+`WebApplicationFactory<Program>` loads the **service's** content root `appsettings.json`, not
+the test project's. If the service's `appsettings.json` has an encrypted `Jwt:SecretKey`,
+`PassthroughCipherService` returns it unchanged — causing JWT signature mismatches on every
+authenticated test. Fix with `ConfigureAppConfiguration` + `AddInMemoryCollection` to inject
+plaintext overrides that take precedence over all `appsettings.json` values.
+
+```csharp
+public static WebApplicationFactory<Program> Create() =>
+    new WebApplicationFactory<Program>()
+        .WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Test");
+
+            // Override JWT settings — takes precedence over the service's appsettings.json.
+            // Required because WebApplicationFactory loads the SERVICE's content root config
+            // (which has an encrypted SecretKey), not the test project's appsettings.json.
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Jwt:SecretKey"]  = TestConstants.JwtSecret,
+                    ["Jwt:Issuer"]     = TestConstants.JwtIssuer,
+                    ["Jwt:Audience"]   = TestConstants.JwtAudience,
+                });
+            });
+
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton<ICipherService, PassthroughCipherService>();
+
+                // Discard outbound email — no SendGrid API key required.
+                services.AddSingleton<IEmailSender, NoOpEmailSender>();
+            });
+        });
+```
+
+**`NoOpEmailSender`** is a minimal infrastructure override for services that send email:
+
+```csharp
+internal sealed class NoOpEmailSender : IEmailSender
+{
+    public Task SendAsync(string to, string subject, string body, CancellationToken ct = default)
+        => Task.CompletedTask;
+}
+```
+
 Rules:
-- **Two overloads only:** `Create()` for stateless tests, `CreateWithRedis(string)` for cache/lock tests
-- **DI overrides are allowed only for infrastructure** (cipher, external connections). Never for
-  business logic, validators, or domain services.
+- **DI overrides are allowed only for infrastructure** (cipher, email, external connections).
+  Never for business logic, validators, or domain services.
+- Use `ConfigureAppConfiguration` + `AddInMemoryCollection` (not `UseSetting`) when you need
+  to override values that are read during `WebApplicationFactory` host construction.
 - The factory is disposable — call `await factory.DisposeAsync()` in `DisposeAsync()` if the
   test class implements `IAsyncLifetime`
 - Do not subclass `WebApplicationFactory<Program>` — it hides the override from the reader
@@ -136,16 +188,23 @@ All fixed test values live in one visible file. Never hardcode strings in test m
 // Helpers/TestConstants.cs
 public static class TestConstants
 {
-    // JWT — must match appsettings.Test.json Jwt section (plaintext; PassthroughCipherService)
+    // JWT — injected via ConfigureAppConfiguration in TestHost; must match JwtFactory parameters.
     public const string JwtSecret   = "nova-test-signing-key-minimum-32-chars-x";
     public const string JwtIssuer   = "https://auth.nova.internal";
     public const string JwtAudience = "nova-api";
 
-    // Tenancy — must match a tenant entry in appsettings.Test.json
-    public const string TenantId    = "BLDK";
+    // RequestContext — all four fields are required by RequestContextValidator.
+    // Services that use AddNovaTenancy() also require TenantId to match a JWT claim.
+    public const string TenantId    = "BTDK";
+    public const string CompanyId   = "COMPANY-001";
+    public const string BranchId    = "BRANCH-001";
     public const string UserId      = "test-user-001";
 }
 ```
+
+Note: `CompanyId` and `BranchId` were added when writing Presets.Api tests. `RequestContextValidator`
+requires all four fields (`tenant_id`, `company_id`, `branch_id`, `user_id`) — omitting any returns
+400. Include all four in every service's `TestConstants`.
 
 ---
 

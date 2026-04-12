@@ -1,0 +1,8 @@
+{
+  "id": "prod-env-todo",
+  "name": "Nova.ToDo.Api – Production",
+  "_postman_variable_scope": "environment",
+  "values": [
+    { "key": "base_url", "value": "https://todo-api.novadhruv.com", "type": "default", "enabled": true }
+  ]
+}

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Nova.Presets.Api</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Asp.Versioning.Http"                       Version="8.*" />
+    <PackageReference Include="Konscious.Security.Cryptography.Argon2"    Version="1.*" />
+    <PackageReference Include="SendGrid"                                   Version="9.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\shared\Nova.Shared\Nova.Shared.csproj" />
+    <ProjectReference Include="..\..\shared\Nova.Shared.Web\Nova.Shared.Web.csproj" />
+  </ItemGroup>
+  <!-- Embed SQL migration scripts so they are available inside the published binary. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\**\*.sql" />
+  </ItemGroup>
+</Project>

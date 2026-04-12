@@ -1,0 +1,8 @@
+{
+  "id": "dev-env-crm",
+  "name": "Nova.CRM.Api – Dev",
+  "_postman_variable_scope": "environment",
+  "values": [
+    { "key": "base_url", "value": "http://localhost:5104", "type": "default", "enabled": true }
+  ]
+}

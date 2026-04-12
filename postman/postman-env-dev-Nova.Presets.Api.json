@@ -1,0 +1,8 @@
+{
+  "id": "dev-env-presets",
+  "name": "Nova.Presets.Api – Dev",
+  "_postman_variable_scope": "environment",
+  "values": [
+    { "key": "base_url", "value": "http://localhost:5103", "type": "default", "enabled": true }
+  ]
+}

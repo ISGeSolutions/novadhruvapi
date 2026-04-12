@@ -24,7 +24,7 @@ namespace Nova.Shared.Locking;
 /// <para><b>Key naming convention:</b></para>
 /// <list type="bullet">
 ///   <item>Tenant-scoped:  <c>tenant:{tenantId}:{entity}:{id}</c>
-///         e.g. <c>tenant:BLDK:booking:create:BK-001</c></item>
+///         e.g. <c>tenant:BTDK:booking:create:BK-001</c></item>
 ///   <item>Global job:     <c>nova:job:{job-name}</c>
 ///         e.g. <c>nova:job:send-reminders</c></item>
 /// </list>

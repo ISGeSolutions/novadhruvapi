@@ -1,0 +1,943 @@
+{
+  "info": {
+    "name": "Nova.Analytics.Api",
+    "description": "Analytics API endpoints covering realtime client views and WebSocket events.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5107",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Realtime Client View",
+      "item": [
+        {
+          "name": "Active Sessions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/real-time-client-view-active-sessions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "real-time-client-view-active-sessions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+            },
+            "description": "Returns all currently active client sessions.\n\nContext fields (tenant_id, company_code, branch_code, user_id, browser_locale, browser_timezone, ip_address) are required."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": \"sess-001\",\n    \"booking_no\": \"BK-12345\",\n    \"client_name\": \"John Smith\",\n    \"consultant\": \"Sarah M\",\n    \"product\": \"Safari Adventure\",\n    \"destination\": \"Kenya\",\n    \"departure_date\": \"2026-06-15\",\n    \"return_date\": \"2026-06-25\",\n    \"pax\": 2,\n    \"status\": \"Active\",\n    \"last_action\": \"Viewing itinerary\",\n    \"last_action_time\": \"2 min ago\",\n    \"current_page\": \"Itinerary\",\n    \"session_duration\": \"12:34\",\n    \"idle_time\": \"00:00\",\n    \"actions_count\": 15,\n    \"app_code\": \"NV\",\n    \"device\": \"Desktop\",\n    \"os\": \"Windows 11\",\n    \"browser\": \"Chrome 120\",\n    \"is_agent_booking\": false\n  }\n]"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Invalid or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"tenant_id\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "30"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests\"\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Session Detail",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/real-time-client-view-session-detail",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "real-time-client-view-session-detail"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\",\n  \"session_id\": \"sess-001\"\n}"
+            },
+            "description": "Returns detailed information for a single active session.\n\nRequires session_id in the request body along with context fields."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"sess-001\",\n  \"booking_no\": \"BK-12345\",\n  \"client_name\": \"John Smith\",\n  \"consultant\": \"Sarah M\",\n  \"product\": \"Safari Adventure\",\n  \"destination\": \"Kenya\",\n  \"departure_date\": \"2026-06-15\",\n  \"return_date\": \"2026-06-25\",\n  \"pax\": 2,\n  \"status\": \"Active\",\n  \"last_action\": \"Viewing itinerary\",\n  \"last_action_time\": \"2 min ago\",\n  \"quote_no\": \"Q-98765\",\n  \"total_value\": \"£4,500\",\n  \"payment_status\": \"Deposit Paid\",\n  \"notes\": \"VIP client\",\n  \"current_page\": \"Itinerary\",\n  \"session_duration\": \"12:34\",\n  \"idle_time\": \"00:00\",\n  \"actions_count\": 15,\n  \"referral_url\": \"https://google.com\",\n  \"is_agent_booking\": false,\n  \"avatar_url\": \"\",\n  \"app_code\": \"NV\",\n  \"device\": \"Desktop\",\n  \"os\": \"Windows 11\",\n  \"browser\": \"Chrome 120\",\n  \"ip\": \"192.168.1.50\",\n  \"page_views\": [],\n  \"interactions\": []\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Invalid or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"session_id\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "30"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests\"\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Historical Sessions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/real-time-client-view-historical-sessions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "real-time-client-view-historical-sessions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\",\n  \"page\": 1,\n  \"page_size\": 25,\n  \"sort_key\": \"client_name\",\n  \"sort_dir\": \"asc\",\n  \"filters\": {\n    \"consultant\": \"Priya M\",\n    \"status\": [\"Completed\", \"Abandoned\"]\n  }\n}"
+            },
+            "description": "Returns paginated historical sessions with server-side sorting and filtering.\n\nPagination: page + page_size. Sorting: sort_key + sort_dir. Filters: consultant, status[], app_code, departure_date_from, departure_date_to, plus any column-level array filters.\n\nContext fields required."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"records\": [\n    {\n      \"id\": \"hist-001\",\n      \"date_time\": \"2026-03-15T10:30:00Z\",\n      \"user\": \"guest\",\n      \"user_type\": \"Guest\",\n      \"client_name\": \"Jane Doe\",\n      \"consultant\": \"Priya M\",\n      \"product\": \"European Explorer\",\n      \"booking_no\": \"BK-54321\",\n      \"quote_no\": \"Q-11111\",\n      \"entry_type\": \"Return Visit\",\n      \"landing_page\": \"Home\",\n      \"browser\": \"Safari 17\",\n      \"os\": \"macOS\",\n      \"status\": \"Completed\",\n      \"session_start\": \"10:30\",\n      \"last_seen\": \"11:15\",\n      \"session_end\": \"11:20\",\n      \"duration\": \"00:50:00\",\n      \"app_code\": \"NV\",\n      \"departure_date\": \"2026-07-01\",\n      \"destination\": \"France\",\n      \"device\": \"Desktop\",\n      \"is_agent_booking\": false,\n      \"actions_count\": 22\n    }\n  ],\n  \"total_records\": 200,\n  \"current_page\": 1,\n  \"total_pages\": 8,\n  \"page_size\": 25\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Invalid or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"page\", \"message\": \"Must be a positive integer\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "30"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests\"\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Historical Detail",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/real-time-client-view-historical-detail",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "real-time-client-view-historical-detail"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\",\n  \"session_id\": \"hist-001\"\n}"
+            },
+            "description": "Returns full detail for a single historical session.\n\nRequires session_id in the request body along with context fields."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"hist-001\",\n  \"date_time\": \"2026-03-15T10:30:00Z\",\n  \"user\": \"guest\",\n  \"user_type\": \"Guest\",\n  \"client_name\": \"Jane Doe\",\n  \"consultant\": \"Priya M\",\n  \"product\": \"European Explorer\",\n  \"booking_no\": \"BK-54321\",\n  \"quote_no\": \"Q-11111\",\n  \"entry_type\": \"Return Visit\",\n  \"landing_page\": \"Home\",\n  \"landing_url\": \"https://example.com\",\n  \"browser\": \"Safari 17\",\n  \"os\": \"macOS\",\n  \"ip\": \"10.0.0.5\",\n  \"referrer\": \"https://google.com\",\n  \"status\": \"Completed\",\n  \"session_start\": \"10:30\",\n  \"last_seen\": \"11:15\",\n  \"session_end\": \"11:20\",\n  \"duration\": \"00:50:00\",\n  \"client_id\": \"CLI-001\",\n  \"session_id\": \"SESS-001\",\n  \"app_code\": \"NV\",\n  \"departure_date\": \"2026-07-01\",\n  \"referral_url\": \"https://google.com\",\n  \"is_agent_booking\": false,\n  \"destination\": \"France\",\n  \"device\": \"Desktop\",\n  \"page_views\": [],\n  \"interactions\": [],\n  \"actions_count\": 22\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Invalid or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"session_id\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "30"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests\"\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Page Visits",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/real-time-client-view-page-visits",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "real-time-client-view-page-visits"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\",\n  \"session_id\": \"sess-001\"\n}"
+            },
+            "description": "Returns the page visit history for a given session.\n\nRequires session_id in the request body along with context fields."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"page\": \"Home\",\n    \"url\": \"https://example.com/\",\n    \"time_on_page\": \"02:15\",\n    \"timestamp\": \"2026-03-15T10:30:00Z\",\n    \"visit_date\": \"2026-03-15\",\n    \"device\": \"Desktop\",\n    \"os\": \"Windows 11\",\n    \"browser\": \"Chrome 120\",\n    \"ip\": \"192.168.1.50\"\n  }\n]"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Invalid or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"session_id\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "30"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests\"\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Summary Stats",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/real-time-client-view-summary-stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "real-time-client-view-summary-stats"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"192.168.1.100\"\n}"
+            },
+            "description": "Returns aggregated session counts: active, idle, closed, and total.\n\nContext fields required."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"active\": 12,\n  \"idle\": 5,\n  \"closed\": 28,\n  \"total\": 45\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Invalid or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"tenant_id\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "30"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests\"\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "WebSocket Events (Reference)",
+      "description": "These are Socket.IO events, not REST endpoints. This folder documents their payload shapes for reference.\n\nConnection: Socket.IO at the configured server URL.\nTransport: WebSocket with Socket.IO protocol.\nEvents are server-pushed — no request is needed.",
+      "item": [
+        {
+          "name": "task-counts-updated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/socket.io",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "socket.io"
+              ]
+            },
+            "description": "⚡ SOCKET.IO EVENT — not a REST endpoint.\n\nEvent name: task-counts-updated\nDirection: Server → Client\nFrequency: Emitted periodically with current task KPI counts.\n\nPayload shape:\n```json\n{\n  \"tasks_high\": 3,\n  \"tasks_normal\": 8,\n  \"tasks_low\": 2,\n  \"overdue_high\": 1,\n  \"overdue_normal\": 3,\n  \"overdue_low\": 0,\n  \"tasks_due_today\": 5,\n  \"wip_tasks\": 3,\n  \"tasks_assigned_and_due_today\": 2,\n  \"next_7_days_tasks\": [\n    {\n      \"date\": \"2026-03-15\",\n      \"tasks\": [\n        {\n          \"id\": \"uuid\",\n          \"title\": \"Follow up with client\",\n          \"priority\": \"high\",\n          \"due_date\": \"2026-03-15\",\n          \"assigned_date\": \"2026-03-14\",\n          \"assignee\": \"Sarah\",\n          \"status\": \"Open\"\n        }\n      ]\n    }\n  ]\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "new-celebration",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/socket.io",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "socket.io"
+              ]
+            },
+            "description": "⚡ SOCKET.IO EVENT — not a REST endpoint.\n\nEvent name: new-celebration\nDirection: Server → Client\nFrequency: Emitted when a team celebration event occurs.\n\nPayload shape:\n```json\n{\n  \"id\": \"uuid\",\n  \"type\": \"new_booking | milestone | team_win\",\n  \"message\": \"🎉 New booking confirmed — Maldives Luxury Villa!\",\n  \"timestamp\": \"2026-03-15T10:30:00.000Z\"\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "new-enquiries-updated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/socket.io",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "socket.io"
+              ]
+            },
+            "description": "⚡ SOCKET.IO EVENT — not a REST endpoint.\n\nEvent name: new-enquiries-updated\nDirection: Server → Client\nFrequency: Emitted when new enquiry counts change.\n\nPayload shape:\n```json\n{\n  \"new_enquiries\": 6\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "unclosed-web-enquiries-updated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/socket.io",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "socket.io"
+              ]
+            },
+            "description": "⚡ SOCKET.IO EVENT — not a REST endpoint.\n\nEvent name: unclosed-web-enquiries-updated\nDirection: Server → Client\nFrequency: Emitted when the unclosed web enquiry count changes.\n\nPayload shape:\n```json\n{\n  \"unclosed_web_enquiries\": 3\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "avg-enquiry-response-time-updated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/socket.io",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "socket.io"
+              ]
+            },
+            "description": "⚡ SOCKET.IO EVENT — not a REST endpoint.\n\nEvent name: avg-enquiry-response-time-updated\nDirection: Server → Client\nFrequency: Emitted when the average enquiry response time changes.\n\nPayload shape:\n```json\n{\n  \"avg_response_minutes\": 14\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "active-users-updated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/socket.io",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "socket.io"
+              ]
+            },
+            "description": "⚡ SOCKET.IO EVENT — not a REST endpoint.\n\nEvent name: active-users-updated\nDirection: Server → Client\nFrequency: Emitted when the active user list changes.\n\nPayload shape:\n```json\n{\n  \"users\": [\n    {\n      \"id\": \"user-1\",\n      \"name\": \"Sarah\",\n      \"initials\": \"SM\",\n      \"avatar_url\": \"https://...\",\n      \"status\": \"online\",\n      \"status_label\": \"Available\",\n      \"status_note\": \"Reviewing bookings\",\n      \"last_seen\": \"2026-03-15T10:30:00.000Z\",\n      \"team\": \"London HQ\"\n    }\n  ]\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "grouptour-task-activity-updated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/socket.io",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "socket.io"
+              ]
+            },
+            "description": "⚡ SOCKET.IO EVENT — not a REST endpoint.\n\nEvent name: grouptour-task-activity-updated\nDirection: Server → Client\nFrequency: Emitted when a single activity status is changed by another user.\n\nPayload shape:\n```json\n{\n  \"departure_id\": \"DEP-001\",\n  \"activity_id\": \"ACT-005\",\n  \"template_code\": \"HOTEL\",\n  \"status\": \"complete\",\n  \"notes\": \"Confirmed with supplier\",\n  \"updated_by\": \"Sarah\",\n  \"updated_at\": \"2026-03-19T14:30:00.000Z\"\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "grouptour-task-departure-updated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/socket.io",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "socket.io"
+              ]
+            },
+            "description": "⚡ SOCKET.IO EVENT — not a REST endpoint.\n\nEvent name: grouptour-task-departure-updated\nDirection: Server → Client\nFrequency: Emitted when departure-level data is changed (pax, assignments, notes).\n\nPayload shape:\n```json\n{\n  \"departure_id\": \"DEP-001\",\n  \"fields_changed\": [\"pax_count\", \"ops_manager\"],\n  \"snapshot\": {\n    \"pax_count\": 24,\n    \"ops_manager\": \"James\"\n  },\n  \"updated_by\": \"Alex\",\n  \"updated_at\": \"2026-03-19T14:31:00.000Z\"\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "grouptour-task-summary-updated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/socket.io",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "socket.io"
+              ]
+            },
+            "description": "⚡ SOCKET.IO EVENT — not a REST endpoint.\n\nEvent name: grouptour-task-summary-updated\nDirection: Server → Client\nFrequency: Emitted when operations summary statistics change.\n\nPayload shape:\n```json\n{\n  \"overdue\": 5,\n  \"due_later\": 12,\n  \"done_today\": 8,\n  \"done_past\": 42\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "real-time-client-view-sessions-updated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/socket.io",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "socket.io"
+              ]
+            },
+            "description": "⚡ SOCKET.IO EVENT — not a REST endpoint.\n\nEvent name: real-time-client-view-sessions-updated\nDirection: Server → Client\nFrequency: Emitted at configurable intervals (5/30/45/60s) when active session data changes. Used by the Client Activity Monitor page.\n\nPayload shape:\n```json\n{\n  \"sessions\": [\n    {\n      \"id\": \"sess-001\",\n      \"booking_no\": \"BK-12345\",\n      \"client_name\": \"John Smith\",\n      \"consultant\": \"Sarah M\",\n      \"product\": \"Safari Adventure\",\n      \"destination\": \"Kenya\",\n      \"status\": \"Active\",\n      \"last_action\": \"Viewing itinerary\",\n      \"current_page\": \"Itinerary\",\n      \"session_duration\": \"12:34\",\n      \"actions_count\": 15\n    }\n  ],\n  \"counts\": {\n    \"active\": 12,\n    \"idle\": 5,\n    \"closed\": 28,\n    \"total\": 45\n  }\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "real-time-client-view-realtime-updated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/socket.io",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "socket.io"
+              ]
+            },
+            "description": "⚡ SOCKET.IO EVENT — not a REST endpoint.\n\nEvent name: real-time-client-view-realtime-updated\nDirection: Server → Client\nFrequency: Emitted at configurable intervals (5/30/45/60s) when realtime activity data changes. Used by the Realtime Activity page.\n\nPayload shape:\n```json\n{\n  \"sessions\": [\n    {\n      \"id\": \"sess-001\",\n      \"booking_no\": \"BK-12345\",\n      \"client_name\": \"John Smith\",\n      \"consultant\": \"Sarah M\",\n      \"product\": \"Safari Adventure\",\n      \"destination\": \"Kenya\",\n      \"status\": \"Active\",\n      \"last_action\": \"Viewing itinerary\",\n      \"current_page\": \"Itinerary\",\n      \"session_duration\": \"12:34\",\n      \"actions_count\": 15\n    }\n  ],\n  \"counts\": {\n    \"active\": 12,\n    \"idle\": 5,\n    \"closed\": 28,\n    \"total\": 45\n  }\n}\n```"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

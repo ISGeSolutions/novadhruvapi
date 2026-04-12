@@ -43,7 +43,7 @@ public static class EchoEndpoint
         IHttpContextAccessor httpContextAccessor)
     {
         // Step 1 — Validate standard context fields (400 if any required field is missing).
-        // Always first — ensures tenant_id, company_id, branch_id, user_id are present
+        // Always first — ensures tenant_id, company_code, branch_code, user_id are present
         // before doing anything else.
         Dictionary<string, string[]> contextErrors = RequestContextValidator.Validate(request);
         if (contextErrors.Count > 0)
@@ -101,7 +101,7 @@ public static class EchoEndpoint
     // Request — inherits all 7 standard context fields from RequestContext.
     // Wire format (snake_case):
     //   {
-    //     "tenant_id": "...", "company_id": "...", "branch_id": "...",
+    //     "tenant_id": "...", "company_code": "...", "branch_code": "...",
     //     "user_id": "...", "browser_locale": "en-GB", "browser_timezone": "Europe/London",
     //     "ip_address": "...",   ← optional
     //     "message": "..."       ← domain-specific field

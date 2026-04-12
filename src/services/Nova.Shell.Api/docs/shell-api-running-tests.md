@@ -115,7 +115,7 @@ to match. If `appsettings.json` `Jwt.Issuer` or `Jwt.Audience` are changed, upda
 ```json
 "Tenants": [
   {
-    "TenantId":         "BLDK",
+    "TenantId":         "BTDK",
     "DisplayName":      "Blixen Tours (Test)",
     "DbType":           "MsSql",
     "ConnectionString": "unused-in-phase1-tests",

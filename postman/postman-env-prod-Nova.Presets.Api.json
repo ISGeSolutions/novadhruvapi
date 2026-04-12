@@ -1,0 +1,8 @@
+{
+  "id": "prod-env-presets",
+  "name": "Nova.Presets.Api – Production",
+  "_postman_variable_scope": "environment",
+  "values": [
+    { "key": "base_url", "value": "https://presets-api.novadhruv.com", "type": "default", "enabled": true }
+  ]
+}

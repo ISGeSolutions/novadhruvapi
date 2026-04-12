@@ -1,0 +1,39 @@
+{
+  "Logging": {
+    "DefaultLevel": "Debug",
+    "EnableRequestResponseLogging": false,
+    "EnableDiagnosticLogging": true,
+    "Windows": []
+  },
+  "RateLimiting": {
+    "Enabled": false,
+    "PermitLimit": 10000,
+    "WindowSeconds": 60,
+    "QueueLimit": 0
+  },
+  "OutboxRelay": {
+    "Enabled": false,
+    "PollingIntervalSeconds": 60,
+    "BatchSize": 0
+  },
+  "Caching": {
+    "GloballyEnabled": false,
+    "EmergencyDisable": false,
+    "DryRunMode": false,
+    "Profiles": {
+      "ReferenceData":   { "Layer": "None", "TtlSeconds": 0, "Enabled": false },
+      "TransactionData": { "Layer": "None", "TtlSeconds": 0, "Enabled": false }
+    },
+    "EndpointExclusions": []
+  },
+  "ChangePassword": {
+    "TokenExpiryMinutes": 60
+  },
+  "Email": {
+    "Provider": "SendGrid",
+    "SendGrid": {
+      "SenderAddress": "noreply@novaplatform.io",
+      "SenderDisplayName": "Nova Platform"
+    }
+  }
+}

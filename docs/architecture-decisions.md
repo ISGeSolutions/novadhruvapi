@@ -255,6 +255,8 @@ After domain columns, every table has these six in order:
 | MySQL/MariaDB | `SeqNo` | `INT AUTO_INCREMENT` | DB auto-increment |
 | Postgres | `id` | `uuid` | `Guid.CreateVersion7()` in application code |
 
+**Identity column naming rule**: Legacy tables use `seqno` (MSSQL: `SeqNo`) as the identity column name, with a few exceptions. All Nova-authored tables use `id`.
+
 **API representation**: All DTOs use `string` for IDs. The infrastructure layer parses to `int` (MSSQL/MySQL) or `Guid` (Postgres).
 
 ---
@@ -482,7 +484,7 @@ Database connections, tenant registry, JWT settings, OTel endpoints, broker cred
   },
   "Tenants": [
     {
-      "TenantId":         "BLDK",
+      "TenantId":         "BTDK",
       "DisplayName":      "Blixen Tours",
       "DbType":           "MsSql",
       "ConnectionString": "ENC:...",
@@ -546,10 +548,22 @@ Logging levels, caching policies, rate limiting, outbox relay tuning.
 
 ### Configuration
 
-- Two file sinks: `logs/audit-.log` (Info+, always active), `logs/debug-.log` (Debug+, when `EnableDiagnosticLogging: true`)
-- Output: structured JSON (queryable in Datadog/OTel)
-- Enrichers: `FromLogContext`, correlation ID (from `HttpContext.Items`), tenant ID (from `TenantContext`)
+All sink decisions live in `Nova.Shared/Logging/SerilogSetupExtensions.cs`. Services call `builder.AddNovaLogging()` and are otherwise unaware of what sinks are active. `Nova.AppHost` owns which infrastructure containers start and injects their endpoints; `AddNovaLogging()` consumes those endpoints.
+
 - Extension: `AddNovaLogging()` targets `IHostApplicationBuilder`; uses `builder.Services.AddSerilog(dispose: true)` — **not** `builder.Host.UseSerilog()`
+- Enrichers: `FromLogContext`, correlation ID (from `HttpContext.Items`), tenant ID (from `TenantContext`)
+
+### Sink Pipeline
+
+| Sink | Always active? | Condition |
+|------|---------------|-----------|
+| Console | Yes | Always |
+| `logs/audit-.log` (Info+, rolling daily) | Yes | Always |
+| `logs/debug-.log` (Debug+, rolling daily) | No | `opsettings.json Logging.EnableDiagnosticLogging: true` |
+| OpenTelemetry OTLP | No | `OTEL_EXPORTER_OTLP_ENDPOINT` env var set (injected by Aspire automatically) |
+| Seq | No | `ConnectionStrings:seq` present (injected by Aspire when `Infrastructure:UseSeq: true` in AppHost) |
+
+**Seq** is the primary persistent log store for local development. All services write to a single Seq instance at `http://localhost:5341`. Supports cross-service structured queries (e.g. `tenant_id = 'BTDK' and @Level = 'Error'`). Silently skipped when running outside Aspire (tests, standalone `dotnet run`).
 
 ### Log Levels
 
@@ -1038,17 +1052,33 @@ await app.RunAsync();
 - ✓ Services added via plain `<ProjectReference>`
 - **Dev-only**: AppHost is for local development. Production uses Docker Compose / Kubernetes
 
+### Conditional Infrastructure Flags
+
+Container services are opt-in via `Nova.AppHost/appsettings.json`. The AppHost fails fast at startup if Docker is not running and any container is required.
+
+| Flag | Default | Container | When to enable |
+|------|---------|-----------|----------------|
+| `Infrastructure:UseRedis` | `true` | Redis | Any service uses caching, distributed locking, or Redis-backed outbox relay |
+| `Infrastructure:UseRabbitMQ` | `false` | RabbitMQ | At least one tenant uses `BrokerType: RabbitMq` in any service config |
+| `Infrastructure:UseSeq` | `true` | Seq | Always — persistent structured log store for local dev |
+
+All containers use `WithLifetime(ContainerLifetime.Persistent)` — they survive AppHost restarts and preserve data between runs.
+
 ### Adding a New Domain Service
 
 ```csharp
 // Nova.AppHost/Program.cs
-builder.AddProject<Projects.Nova_Xyz_Api>("xyz");
+var xyz = builder.AddProject<Projects.Nova_Xyz_Api>("xyz");
+if (redis is not null) xyz.WithReference(redis).WaitFor(redis);
+if (seq   is not null) xyz.WithReference(seq).WaitFor(seq);
 ```
 
 ```xml
 <!-- Nova.AppHost/Nova.AppHost.csproj -->
 <ProjectReference Include="..\Nova.Xyz.Api\Nova.Xyz.Api.csproj" />
 ```
+
+Wire `WithReference(seq)` on every new service so logs flow to Seq automatically.
 
 ### Running Locally
 
@@ -1057,7 +1087,7 @@ export ENCRYPTION_KEY=your-dev-key
 aspire run
 ```
 
-Aspire dashboard starts automatically. OTLP traces route to the dashboard without manual config.
+Aspire dashboard starts automatically at the URL printed in the terminal. OTLP traces route to the dashboard without manual config. Seq starts at `http://localhost:5341`.
 
 ---
 
@@ -1134,3 +1164,34 @@ Any query using `ISqlDialect` is tested against all three target engines (MSSQL,
 | `Endpoints/TestDb{MsSql,Postgres,MySql}Endpoint.cs` | Diagnostic DB queries |
 | `HealthChecks/{MsSql,Postgres,MySql}HealthCheck.cs` | Health check implementations |
 | `Migrations/{MsSql,Postgres,MariaDb}/` | Migration script folders |
+| `docs/nova-shell-api-guide.md` | Full developer guide — reference implementation |
+| `docs/shell-api-running-tests.md` | Test run guide (14/14 passing) |
+
+### Nova.CommonUX.Api (port 5102)
+
+| File | Purpose |
+|------|---------|
+| `Program.cs` | Startup wiring |
+| `appsettings.json` / `opsettings.json` | App and ops config |
+| `Endpoints/Auth/` | Login, token, refresh, magic-link, social, 2FA, forgot/reset password |
+| `Endpoints/TenantConfigEndpoint.cs` | `POST /tenant-config` — branding and feature flags |
+| `Endpoints/MainAppMenusEndpoint.cs` | `POST /novadhruv-mainapp-menus` — nav menus per tenant |
+| `Endpoints/AuthDbHealthEndpoint.cs` | `GET /health/db` |
+| `Endpoints/RunAuthMigrationsEndpoint.cs` | `POST /admin/migrations/run` |
+| `Migrations/{MsSql,Postgres,MariaDb}/` | `nova_auth` DB schema; 2 versions (V001 base, V002 enabled_auth_methods) |
+
+### Nova.Presets.Api (port 5103)
+
+| File | Purpose |
+|------|---------|
+| `Program.cs` | Startup wiring; serves `/avatars` as static files |
+| `appsettings.json` / `opsettings.json` | App and ops config; `AvatarStorage.LocalDirectory` must be a valid OS path |
+| `Endpoints/UserProfileEndpoint.cs` | `POST /api/v1/user-profile` |
+| `Endpoints/UploadAvatarEndpoint.cs` | `POST /api/v1/user-profile/avatar` (multipart) |
+| `Endpoints/StatusOptionsEndpoint.cs` | `POST /api/v1/user-profile/status-options` |
+| `Endpoints/UpdateStatusEndpoint.cs` | `PATCH /api/v1/user-profile/status` |
+| `Endpoints/ChangePasswordEndpoint.cs` | `POST /api/v1/user-profile/change-password` |
+| `Endpoints/ConfirmPasswordChangeEndpoint.cs` | `POST /api/v1/user-profile/confirm-password-change` (anonymous) |
+| `Endpoints/BranchesEndpoint.cs` | `POST /api/v1/branches` |
+| `Migrations/{MsSql,Postgres,MariaDb}/` | `presets` DB schema |
+| `docs/presets-api-running-tests.md` | Test run guide (39/39 passing) |

@@ -1,0 +1,7 @@
+{
+  "files.associations": {
+    "**/migrations/mssql/*.sql": "tsql",
+    "**/migrations/postgres/*.sql": "postgres",
+    "**/migrations/mariadb/*.sql": "mysql"
+  }
+}

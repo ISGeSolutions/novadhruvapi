@@ -431,3 +431,6 @@ FodyWeavers.xsd
 .DS_Store
 # Test results and logs
 TestResults/
+
+# Local developer overrides — contain secrets, never commit
+appsettings.local.json

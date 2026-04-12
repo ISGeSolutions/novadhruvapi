@@ -1,0 +1,8 @@
+{
+  "id": "prod-env-opsbookings",
+  "name": "Nova.OpsBookings.Api – Production",
+  "_postman_variable_scope": "environment",
+  "values": [
+    { "key": "base_url", "value": "https://opsbookings-api.novadhruv.com", "type": "default", "enabled": true }
+  ]
+}

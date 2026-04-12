@@ -1,8 +1,10 @@
 using System.Data;
 using System.Data.Common;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using MySqlConnector;
 using Npgsql;
+using Nova.Shared.Configuration;
 using Nova.Shared.Security;
 using Nova.Shared.Tenancy;
 
@@ -10,29 +12,38 @@ namespace Nova.Shared.Data;
 
 /// <summary>
 /// Resolves and opens database connections, decrypting connection strings via <see cref="ICipherService"/>.
+/// When <c>opsettings.json → SqlLogging.Enabled</c> is <c>true</c>, wraps every connection in a
+/// <see cref="LoggingDbConnection"/> so that Dapper queries are logged before execution.
 /// </summary>
 public sealed class DbConnectionFactory : IDbConnectionFactory
 {
-    private readonly ICipherService _cipherService;
+    private readonly ICipherService        _cipherService;
+    private readonly IOpsSettingsAccessor  _ops;
+    private readonly ILogger               _logger;
 
     /// <summary>Initialises a new instance of <see cref="DbConnectionFactory"/>.</summary>
-    public DbConnectionFactory(ICipherService cipherService)
+    public DbConnectionFactory(
+        ICipherService        cipherService,
+        IOpsSettingsAccessor  ops,
+        ILogger<DbConnectionFactory> logger)
     {
         _cipherService = cipherService;
+        _ops           = ops;
+        _logger        = logger;
     }
 
     /// <inheritdoc />
     public IDbConnection CreateForTenant(TenantContext tenant)
     {
         string decryptedConnectionString = _cipherService.Decrypt(tenant.ConnectionString);
-        return OpenConnection(decryptedConnectionString, tenant.DbType);
+        return Wrap(OpenConnection(decryptedConnectionString, tenant.DbType));
     }
 
     /// <inheritdoc />
     public IDbConnection CreateFromConnectionString(string connectionString, DbType dbType)
     {
         string decryptedConnectionString = _cipherService.Decrypt(connectionString);
-        return OpenConnection(decryptedConnectionString, dbType);
+        return Wrap(OpenConnection(decryptedConnectionString, dbType));
     }
 
     /// <inheritdoc />
@@ -42,23 +53,35 @@ public sealed class DbConnectionFactory : IDbConnectionFactory
         CancellationToken cancellationToken = default)
     {
         string decryptedConnectionString = _cipherService.Decrypt(connectionString);
-        return await OpenConnectionAsync(decryptedConnectionString, dbType, cancellationToken);
+        return Wrap(await OpenConnectionAsync(decryptedConnectionString, dbType, cancellationToken));
     }
 
     /// <inheritdoc />
     public IDbConnection OpenRaw(string rawConnectionString, DbType dbType) =>
-        OpenConnection(rawConnectionString, dbType);
+        Wrap(OpenConnection(rawConnectionString, dbType));
 
     /// <inheritdoc />
-    public Task<IDbConnection> OpenRawAsync(
+    public async Task<IDbConnection> OpenRawAsync(
         string rawConnectionString,
         DbType dbType,
         CancellationToken cancellationToken = default) =>
-        OpenConnectionAsync(rawConnectionString, dbType, cancellationToken);
+        Wrap(await OpenConnectionAsync(rawConnectionString, dbType, cancellationToken));
 
-    private static IDbConnection OpenConnection(string decryptedConnectionString, DbType dbType)
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
+    private IDbConnection Wrap(DbConnection connection)
     {
-        IDbConnection connection = dbType switch
+        SqlLoggingSettings sqlLogging = _ops.Current.SqlLogging;
+        return sqlLogging.Enabled
+            ? new LoggingDbConnection(connection, _logger, sqlLogging)
+            : connection;
+    }
+
+    private static DbConnection OpenConnection(string decryptedConnectionString, DbType dbType)
+    {
+        DbConnection connection = dbType switch
         {
             DbType.MsSql    => new SqlConnection(decryptedConnectionString),
             DbType.Postgres => new NpgsqlConnection(decryptedConnectionString),
@@ -69,7 +92,7 @@ public sealed class DbConnectionFactory : IDbConnectionFactory
         return connection;
     }
 
-    private static async Task<IDbConnection> OpenConnectionAsync(
+    private static async Task<DbConnection> OpenConnectionAsync(
         string decryptedConnectionString,
         DbType dbType,
         CancellationToken cancellationToken)

@@ -1,0 +1,8 @@
+{
+  "id": "prod-env-analytics",
+  "name": "Nova.Analytics.Api – Production",
+  "_postman_variable_scope": "environment",
+  "values": [
+    { "key": "base_url", "value": "https://analytics-api.novadhruv.com", "type": "default", "enabled": true }
+  ]
+}

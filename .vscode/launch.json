@@ -28,6 +28,12 @@
       "request": "launch",
       "projectPath": "${workspaceFolder}/src/services/Nova.Shell.Api/Nova.Shell.Api.csproj",
       "launchSettingsProfile": "Nova.Shell.Api (Console)"
+    },
+    {
+      "type": "aspire",
+      "request": "launch",
+      "name": "Aspire: Launch default AppHost",
+      "program": "${workspaceFolder}"
     }
   ]
 }

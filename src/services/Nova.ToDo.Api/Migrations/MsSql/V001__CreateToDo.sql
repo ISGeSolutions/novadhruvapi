@@ -49,7 +49,7 @@ BEGIN
         CreatedOn           datetime      NOT NULL,
         UpdatedBy           nvarchar(10)  NOT NULL,
         UpdatedOn           datetime      NOT NULL,
-        UpdatedAt           nvarchar(20)  NOT NULL,
+        UpdatedAt           nvarchar(50)  NOT NULL,
 
         CONSTRAINT PK_ToDo PRIMARY KEY (SeqNo)
     );

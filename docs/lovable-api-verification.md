@@ -47,7 +47,7 @@ client and constructs requests manually, these fields must be added explicitly.
 
 ```json
 {
-  "tenant_id":        "BLDK",
+  "tenant_id":        "BTDK",
   "company_id":       "BLX",
   "branch_id":        "HQ",
   "user_id":          "JD",
@@ -82,7 +82,7 @@ client and constructs requests manually, these fields must be added explicitly.
 | `tenant_id` claim matches `tenant_id` in the request body | Mismatch → `403` |
 | Token is not expired | Expired token → `401` |
 
-**Tenant mismatch (`403`):** A user authenticated as `BLDK` who sends `tenant_id: "other"`
+**Tenant mismatch (`403`):** A user authenticated as `BTDK` who sends `tenant_id: "other"`
 in the body receives `403 Forbidden`, not `401`. Lovable must handle both `401` and `403`
 separately — `401` means re-authenticate, `403` means wrong tenant context.
 

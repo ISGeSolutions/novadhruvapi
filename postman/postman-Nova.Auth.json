@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Nova — Auth (Dev Token Generator)",
-    "description": "Dev-only tooling for generating JWT bearer tokens to use with Nova API services in Postman.\n\n---\n\nSetup (one time per developer)\n\n  1. Create a Postman environment called 'Nova Local Dev'.\n  2. Add the following environment variables:\n       jwt_secret        The plaintext JWT secret (decrypt appsettings.json Jwt.SecretKey with your ENCRYPTION_KEY)\n       tenant_id         Tenant to impersonate, e.g. BLDK\n       company_id        Company within that tenant, e.g. BLDK-MAIN\n       branch_id         Branch, e.g. BLDK-LON\n       user_id           Dev user identifier, e.g. dev-user-001\n  3. Select the 'Nova Local Dev' environment in the top-right dropdown.\n  4. Run '1. Generate Dev JWT' — the access_token variable is set automatically.\n  5. In Nova.Shell.Api requests that need auth, set Authorization → Bearer Token → {{access_token}}.\n\n---\n\nImportant: the jwt_secret must be the plaintext secret — not the encrypted value from appsettings.json.\nNever commit your plaintext jwt_secret to source control.",
+    "description": "Dev-only tooling for generating JWT bearer tokens to use with Nova API services in Postman.\n\n---\n\nSetup (one time per developer)\n\n  1. Create a Postman environment called 'Nova Local Dev'.\n  2. Add the following environment variables:\n       jwt_secret        The plaintext JWT secret (decrypt appsettings.json Jwt.SecretKey with your ENCRYPTION_KEY)\n       tenant_id         Tenant to impersonate, e.g. BTDK\n       company_code        Company within that tenant, e.g. BTDK-MAIN\n       branch_code         Branch, e.g. BTDK-LON\n       user_id           Dev user identifier, e.g. dev-user-001\n  3. Select the 'Nova Local Dev' environment in the top-right dropdown.\n  4. Run '1. Generate Dev JWT' — the access_token variable is set automatically.\n  5. In Nova.Shell.Api requests that need auth, set Authorization → Bearer Token → {{access_token}}.\n\n---\n\nImportant: the jwt_secret must be the plaintext secret — not the encrypted value from appsettings.json.\nNever commit your plaintext jwt_secret to source control.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -27,7 +27,7 @@
   "item": [
     {
       "name": "1. Generate Dev JWT",
-      "description": "Generates a signed JWT from your environment variables and stores it as access_token. Run this first before making authenticated requests to any Nova API service.\n\nRequired environment variables (set in 'Nova Local Dev' environment):\n  jwt_secret    — plaintext JWT secret (decrypt from appsettings.json using ENCRYPTION_KEY)\n  tenant_id     — e.g. BLDK\n  company_id    — e.g. BLDK-MAIN\n  branch_id     — e.g. BLDK-LON\n  user_id       — e.g. dev-user-001\n\nAfter running: access_token is set in your environment. The request itself hits POST /api/v1/echo on Shell.Api (RequireAuthorization) to confirm the token is accepted — a 200 proves JWT auth works end-to-end.",
+      "description": "Generates a signed JWT from your environment variables and stores it as access_token. Run this first before making authenticated requests to any Nova API service.\n\nRequired environment variables (set in 'Nova Local Dev' environment):\n  jwt_secret    — plaintext JWT secret (decrypt from appsettings.json using ENCRYPTION_KEY)\n  tenant_id     — e.g. BTDK\n  company_code    — e.g. BTDK-MAIN\n  branch_code     — e.g. BTDK-LON\n  user_id       — e.g. dev-user-001\n\nAfter running: access_token is set in your environment. The request itself hits POST /api/v1/echo on Shell.Api (RequireAuthorization) to confirm the token is accepted — a 200 proves JWT auth works end-to-end.",
       "item": [
         {
           "name": "Generate Dev JWT + Verify",
@@ -50,7 +50,7 @@
                   "",
                   "// pm.variables.get() searches all scopes: environment → collection → globals.",
                   "// This means jwt_secret / tenant_id etc. can live in any scope — no environment required.",
-                  "const required = ['jwt_secret', 'tenant_id', 'company_id', 'branch_id', 'user_id'];",
+                  "const required = ['jwt_secret', 'tenant_id', 'company_code', 'branch_code', 'user_id'];",
                   "for (const key of required) {",
                   "    if (!pm.variables.get(key)) {",
                   "        throw new Error(`Missing variable: ${key}. Add it to your active environment, collection variables, or Postman globals.`);",
@@ -66,8 +66,8 @@
                   "    aud:        pm.variables.get('jwt_audience'),",
                   "    sub:        pm.variables.get('user_id'),",
                   "    tenant_id:  pm.variables.get('tenant_id'),",
-                  "    company_id: pm.variables.get('company_id'),",
-                  "    branch_id:  pm.variables.get('branch_id'),",
+                  "    company_code: pm.variables.get('company_code'),",
+                  "    branch_code:  pm.variables.get('branch_code'),",
                   "    user_id:    pm.variables.get('user_id'),",
                   "    iat: now,",
                   "    exp: now + 3600",
@@ -128,7 +128,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tenant_id\":        \"{{tenant_id}}\",\n  \"company_id\":       \"{{company_id}}\",\n  \"branch_id\":        \"{{branch_id}}\",\n  \"user_id\":          \"{{user_id}}\",\n  \"browser_locale\":   \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\":          \"auth-verify\"\n}"
+              "raw": "{\n  \"tenant_id\":        \"{{tenant_id}}\",\n  \"company_code\":       \"{{company_code}}\",\n  \"branch_code\":        \"{{branch_code}}\",\n  \"user_id\":          \"{{user_id}}\",\n  \"browser_locale\":   \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\":          \"auth-verify\"\n}"
             },
             "url": {
               "raw": "{{shell_base_url}}/api/v1/echo",
@@ -155,7 +155,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"BLDK-MAIN\",\n  \"branch_id\": \"BLDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\": \"auth-verify\"\n}"
+                  "raw": "{\n  \"tenant_id\": \"BTDK\",\n  \"company_code\": \"BTDK-MAIN\",\n  \"branch_code\": \"BTDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\": \"auth-verify\"\n}"
                 },
                 "url": {
                   "raw": "{{shell_base_url}}/api/v1/echo",
@@ -181,7 +181,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"tenant_id\": \"BLDK\",\n  \"company_id\": \"BLDK-MAIN\",\n  \"branch_id\": \"BLDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\": \"auth-verify\"\n}"
+                  "raw": "{\n  \"tenant_id\": \"BTDK\",\n  \"company_code\": \"BTDK-MAIN\",\n  \"branch_code\": \"BTDK-LON\",\n  \"user_id\": \"dev-user-001\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"message\": \"auth-verify\"\n}"
                 },
                 "url": {
                   "raw": "{{shell_base_url}}/api/v1/echo",
@@ -244,7 +244,7 @@
                 "header": [{ "key": "Content-Type", "value": "application/json" }],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"username\": \"dev-user-001\",\n  \"password\": \"secret\",\n  \"tenant_id\": \"BLDK\"\n}"
+                  "raw": "{\n  \"username\": \"dev-user-001\",\n  \"password\": \"secret\",\n  \"tenant_id\": \"BTDK\"\n}"
                 },
                 "url": {
                   "raw": "{{auth_base_url}}/auth/token",
@@ -252,7 +252,7 @@
                   "path": ["auth", "token"]
                 }
               },
-              "body": "{\n  \"access_token\": \"eyJ...\",\n  \"token_type\": \"Bearer\",\n  \"expires_in\": 3600,\n  \"tenant_id\": \"BLDK\"\n}"
+              "body": "{\n  \"access_token\": \"eyJ...\",\n  \"token_type\": \"Bearer\",\n  \"expires_in\": 3600,\n  \"tenant_id\": \"BTDK\"\n}"
             },
             {
               "name": "401 Unauthorised — Bad credentials",
@@ -265,7 +265,7 @@
                 "header": [{ "key": "Content-Type", "value": "application/json" }],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"username\": \"dev-user-001\",\n  \"password\": \"wrong\",\n  \"tenant_id\": \"BLDK\"\n}"
+                  "raw": "{\n  \"username\": \"dev-user-001\",\n  \"password\": \"wrong\",\n  \"tenant_id\": \"BTDK\"\n}"
                 },
                 "url": {
                   "raw": "{{auth_base_url}}/auth/token",

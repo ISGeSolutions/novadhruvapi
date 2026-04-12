@@ -29,8 +29,8 @@ public static class RequestContextValidator
     /// Returns an empty dictionary when all required fields are present.
     /// </summary>
     /// <remarks>
-    /// Fields validated as required: <c>tenant_id</c>, <c>company_id</c>,
-    /// <c>branch_id</c>, <c>user_id</c>.
+    /// Fields validated as required: <c>tenant_id</c>, <c>company_code</c>,
+    /// <c>branch_code</c>, <c>user_id</c>.
     /// <c>browser_locale</c>, <c>browser_timezone</c>, and <c>ip_address</c> are
     /// informational and are not required for the request to be accepted.
     /// </remarks>
@@ -41,11 +41,11 @@ public static class RequestContextValidator
         if (string.IsNullOrWhiteSpace(request.TenantId))
             errors["tenant_id"] = ["tenant_id is required."];
 
-        if (string.IsNullOrWhiteSpace(request.CompanyId))
-            errors["company_id"] = ["company_id is required."];
+        if (string.IsNullOrWhiteSpace(request.CompanyCode))
+            errors["company_code"] = ["company_code is required."];
 
-        if (string.IsNullOrWhiteSpace(request.BranchId))
-            errors["branch_id"] = ["branch_id is required."];
+        if (string.IsNullOrWhiteSpace(request.BranchCode))
+            errors["branch_code"] = ["branch_code is required."];
 
         if (string.IsNullOrWhiteSpace(request.UserId))
             errors["user_id"] = ["user_id is required."];

@@ -1,0 +1,8 @@
+{
+  "id": "prod-env-commonux",
+  "name": "Nova.CommonUX.Api – Production",
+  "_postman_variable_scope": "environment",
+  "values": [
+    { "key": "base_url", "value": "https://commonux-api.novadhruv.com", "type": "default", "enabled": true }
+  ]
+}

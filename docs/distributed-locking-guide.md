@@ -424,13 +424,13 @@ redis-cli KEYS "nova:job:*"    # all job lock keys
 
 **Inspect a specific lock:**
 ```bash
-redis-cli GET "tenant:BLDK:booking:create:BK-001"
+redis-cli GET "tenant:BTDK:booking:create:BK-001"
 # returns the UUID token, or (nil) if not locked
 ```
 
 **Check its remaining TTL (milliseconds):**
 ```bash
-redis-cli PTTL "tenant:BLDK:booking:create:BK-001"
+redis-cli PTTL "tenant:BTDK:booking:create:BK-001"
 # > 0        = key exists, N ms remaining
 # -1         = key exists but has no TTL (misconfigured — should never happen)
 # -2         = key does not exist (not locked)
@@ -438,7 +438,7 @@ redis-cli PTTL "tenant:BLDK:booking:create:BK-001"
 
 **Manually release a stuck lock (emergency only):**
 ```bash
-redis-cli DEL "tenant:BLDK:booking:create:BK-001"
+redis-cli DEL "tenant:BTDK:booking:create:BK-001"
 ```
 Use this in development or as a last resort in production if the TTL is unreasonably long
 and you need to unblock a resource immediately.
@@ -468,23 +468,23 @@ and inspect TTLs visually. More convenient than `redis-cli` for exploratory debu
 **What a healthy lock cycle looks like in logs:**
 
 ```
-[DBG] Distributed lock acquired: tenant:BLDK:booking:create:BK-001 (TTL: 30s)
-[DBG] Distributed lock released: tenant:BLDK:booking:create:BK-001
+[DBG] Distributed lock acquired: tenant:BTDK:booking:create:BK-001 (TTL: 30s)
+[DBG] Distributed lock released: tenant:BTDK:booking:create:BK-001
 ```
 
 **What contention looks like:**
 
 ```
-[DBG] Distributed lock acquired: tenant:BLDK:booking:create:BK-001 (TTL: 30s)
-[DBG] Distributed lock not acquired — already held: tenant:BLDK:booking:create:BK-001
-[DBG] Distributed lock not acquired — already held: tenant:BLDK:booking:create:BK-001
-[DBG] Distributed lock released: tenant:BLDK:booking:create:BK-001
+[DBG] Distributed lock acquired: tenant:BTDK:booking:create:BK-001 (TTL: 30s)
+[DBG] Distributed lock not acquired — already held: tenant:BTDK:booking:create:BK-001
+[DBG] Distributed lock not acquired — already held: tenant:BTDK:booking:create:BK-001
+[DBG] Distributed lock released: tenant:BTDK:booking:create:BK-001
 ```
 
 **What Redis unavailability looks like:**
 
 ```
-[WRN] Redis unavailable — could not acquire distributed lock for tenant:BLDK:booking:create:BK-001
+[WRN] Redis unavailable — could not acquire distributed lock for tenant:BTDK:booking:create:BK-001
 ```
 
 If you see this warning repeatedly, check `GET /health/redis` and verify the Redis

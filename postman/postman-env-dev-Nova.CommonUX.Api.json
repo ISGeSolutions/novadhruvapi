@@ -1,0 +1,9 @@
+{
+  "id": "dev-env-commonux",
+  "name": "Nova.CommonUX.Api – Dev",
+  "_postman_variable_scope": "environment",
+  "values": [
+    { "key": "base_url", "value": "http://localhost:5102", "type": "default", "enabled": true },
+    { "key": "enabled_auth_methods", "value": "google,microsoft,apple,magic_link", "type": "default", "enabled": true }
+  ]
+}

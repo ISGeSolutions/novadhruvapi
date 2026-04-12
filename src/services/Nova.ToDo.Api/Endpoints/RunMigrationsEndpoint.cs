@@ -14,7 +14,7 @@ namespace Nova.ToDo.Api.Endpoints;
 /// <para><b>Routes</b></para>
 /// <list type="bullet">
 ///   <item><c>POST /admin/migrations/run</c> — run for ALL tenants</item>
-///   <item><c>POST /admin/migrations/run?tenantId=BLDK</c> — run for one tenant only</item>
+///   <item><c>POST /admin/migrations/run?tenantId=BTDK</c> — run for one tenant only</item>
 /// </list>
 /// </remarks>
 public static class RunMigrationsEndpoint

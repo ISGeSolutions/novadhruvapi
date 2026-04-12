@@ -1128,7 +1128,7 @@ At startup, before the app begins serving requests:
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MIGRATION BLOCKED  Tenant=BLDK  Script=Nova.Shell.Api.Migrations.MsSql.V003__RefactorOrders.sql
+MIGRATION BLOCKED  Tenant=BTDK  Script=Nova.Shell.Api.Migrations.MsSql.V003__RefactorOrders.sql
   2 issue(s) prevented automatic execution:
   • [NOT IN POLICY] Line 4: 'DROP TABLE' is not in the MsSql migration policy — DROP TABLE old_import_log
   • [NOT IN POLICY] Line 8: 'ALTER TABLE DROP' is not in the MsSql migration policy — ALTER TABLE orders DROP COLUMN legacy_ref
@@ -1258,7 +1258,7 @@ Each tenant has a `BrokerType` in `appsettings.json`:
 ```json
 {
   "Tenants": [
-    { "TenantId": "BLDK", "BrokerType": "RabbitMq", ... },
+    { "TenantId": "BTDK", "BrokerType": "RabbitMq", ... },
     { "TenantId": "client-b", "BrokerType": "Redis",    ... }
   ]
 }
@@ -2012,10 +2012,10 @@ public interface IDistributedLock : IAsyncDisposable
 
 | Scenario | Format | Example |
 |---|---|---|
-| Tenant-scoped write | `tenant:{tenantId}:{entity}:{id}` | `tenant:BLDK:booking:create:BK-001` |
-| Tenant-scoped payment | `tenant:{tenantId}:payment:{ref}` | `tenant:BLDK:payment:PAY-999` |
+| Tenant-scoped write | `tenant:{tenantId}:{entity}:{id}` | `tenant:BTDK:booking:create:BK-001` |
+| Tenant-scoped payment | `tenant:{tenantId}:payment:{ref}` | `tenant:BTDK:payment:PAY-999` |
 | Global background job | `nova:job:{job-name}` | `nova:job:send-reminders` |
-| Cache stampede prevention | `lock:{cacheKey}` | `lock:tenant:BLDK:config:v1` |
+| Cache stampede prevention | `lock:{cacheKey}` | `lock:tenant:BTDK:config:v1` |
 
 ---
 

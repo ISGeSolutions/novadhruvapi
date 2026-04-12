@@ -1,0 +1,8 @@
+{
+  "id": "dev-env-analytics",
+  "name": "Nova.Analytics.Api – Dev",
+  "_postman_variable_scope": "environment",
+  "values": [
+    { "key": "base_url", "value": "http://localhost:5107", "type": "default", "enabled": true }
+  ]
+}

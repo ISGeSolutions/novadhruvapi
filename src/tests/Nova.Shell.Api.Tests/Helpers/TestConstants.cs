@@ -18,6 +18,6 @@ public static class TestConstants
     public const string InternalJwtAudience = "nova-internal";
 
     // Tenancy — must match a tenant entry in appsettings.json
-    public const string TenantId = "BLDK";
+    public const string TenantId = "BTDK";
     public const string UserId   = "test-user-001";
 }

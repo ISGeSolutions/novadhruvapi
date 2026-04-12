@@ -52,7 +52,7 @@ public static class TestCacheEndpoint
     //      "TransactionData" — None (disabled), for data that must never be stale
     //
     // 2. Choose a key that uniquely identifies the data:
-    //      Tenant-scoped:  "tenant:{tenantId}:{entity}:{id}"   e.g. "tenant:BLDK:booking:BK-001"
+    //      Tenant-scoped:  "tenant:{tenantId}:{entity}:{id}"   e.g. "tenant:BTDK:booking:BK-001"
     //      Global shared:  "nova:{service}:{entity}"           e.g. "nova:shell:config:v1"
     //
     // 3. Call GetOrSetAsync — the factory is only invoked on a cache miss:

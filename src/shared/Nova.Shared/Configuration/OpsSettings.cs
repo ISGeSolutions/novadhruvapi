@@ -17,6 +17,9 @@ public sealed class OpsSettings
 
     /// <summary>Outbox relay configuration.</summary>
     public OutboxRelaySettings OutboxRelay { get; set; } = new();
+
+    /// <summary>SQL query logging configuration.</summary>
+    public SqlLoggingSettings SqlLogging { get; set; } = new();
 }
 
 
@@ -84,4 +87,25 @@ public sealed class OpsLoggingSettings
 
     /// <summary>Time-window overrides for log level.</summary>
     public List<LoggingWindow> Windows { get; set; } = [];
+}
+
+/// <summary>
+/// SQL logging settings (hot-reloadable).
+/// When <see cref="Enabled"/> is <c>true</c>, every Dapper query is logged at <see cref="LogLevel"/>
+/// including the SQL text and all parameter names/values.
+/// Intended for debugging only — disable in production.
+/// </summary>
+public sealed class SqlLoggingSettings
+{
+    /// <summary>When <c>true</c>, SQL is logged for every Dapper query. Default: <c>false</c>.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// Serilog log level at which SQL is written. Default: <c>"Debug"</c>.
+    /// Accepted values: Verbose, Debug, Information, Warning.
+    /// </summary>
+    public string LogLevel { get; set; } = "Debug";
+
+    /// <summary>When <c>true</c>, parameter values are included in the log output. Default: <c>true</c>.</summary>
+    public bool IncludeParameters { get; set; } = true;
 }

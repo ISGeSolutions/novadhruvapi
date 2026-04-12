@@ -1,11 +1,15 @@
 # Postman Mock Server Workflow — Nova API Services
 
-Applies to all Nova API service Postman collections (e.g. Nova.ToDo.Api, Nova.Accounting.Api).
+Applies to all Nova API service Postman collections.
 
-Each service ships a single collection file:
+Each service ships a collection file and per-environment files following the convention:
 
 ```
-postman/Nova.<service-name>.Api.postman_collection.json
+postman/postman-Nova.<ServiceName>.Api.json               ← collection
+postman/postman-env-local.json                            ← shared local dev environment (all services)
+postman/postman-env-dev-Nova.<ServiceName>.Api.json       ← deployed dev environment
+postman/postman-env-staging-Nova.<ServiceName>.Api.json   ← staging environment
+postman/postman-env-prod-Nova.<ServiceName>.Api.json      ← production environment
 ```
 
 This file serves two purposes:
@@ -138,6 +142,29 @@ Use Postman **Environments** to manage this cleanly across team members without 
 |---|---|
 | Nova.Shell.Api | 5100 |
 | Nova.ToDo.Api | 5101 |
+| Nova.CommonUX.Api | 5102 |
+| Nova.Presets.Api | 5103 |
+| Nova.CRM.Api | 5104 |
+| Nova.OpsBookings.Api | 5105 |
+| Nova.OpsGroups.Api | 5106 |
+| Nova.Analytics.Api | 5107 |
+
+---
+
+## Authentication — auto-JWT
+
+Every Nova service collection has a **collection-level pre-request script** that auto-generates a signed JWT before each authenticated request. No manual token generation step is required.
+
+**Setup (once per developer):**
+
+1. Select `Nova — Local Dev` environment in Postman.
+2. Set `jwt_secret` to the plaintext JWT secret (decrypt `appsettings.json Jwt.SecretKey` using your `ENCRYPTION_KEY`).
+3. Ensure `tenant_id`, `company_id`, `branch_id`, `user_id` are set in the environment.
+4. Send any authenticated request — the token is generated and stored as `access_token` automatically.
+
+The script reuses an existing token if it is still valid (>60 seconds remaining), and regenerates on expiry. Anonymous endpoints (health checks, login, etc.) are skipped.
+
+`postman-env-local.json` is the shared local dev environment for all services — it contains all service base URLs and the `access_token` variable. Do not use per-service environment files for local development.
 
 ---
 

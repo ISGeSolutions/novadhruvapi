@@ -1,0 +1,8 @@
+{
+  "id": "prod-env-crm",
+  "name": "Nova.CRM.Api – Production",
+  "_postman_variable_scope": "environment",
+  "values": [
+    { "key": "base_url", "value": "https://crm-api.novadhruv.com", "type": "default", "enabled": true }
+  ]
+}

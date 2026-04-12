@@ -1,0 +1,1777 @@
+{
+  "info": {
+    "name": "Nova.CommonUX.Api",
+    "description": "CommonUX API endpoints covering authentication, configuration, and user profile management.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5102",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// -----------------------------------------------------------------------",
+          "// Nova.CommonUX.Api — Auto JWT",
+          "// Generates a fresh HS256 token if none exists or the existing one is",
+          "// within 60 seconds of expiry. Reads from environment / collection vars.",
+          "// Required variables: jwt_secret, tenant_id, company_code, branch_code, user_id",
+          "// Optional variables: jwt_issuer (default: https://auth.nova.internal)",
+          "//                     jwt_audience (default: nova-api)",
+          "// -----------------------------------------------------------------------",
+          "",
+          "// Skip token generation for anonymous endpoints.",
+          "// Note: /auth/social/link, /auth/social/link/complete, and /auth/refresh",
+          "// are NOT anonymous — they require a Bearer token and are not skipped.",
+          "const url = pm.request.url.toString();",
+          "const anonPaths = [",
+          "    '/hello', '/health',",
+          "    '/auth/login', '/auth/token',",
+          "    '/auth/magic-link',",
+          "    '/auth/forgot-password', '/auth/reset-password',",
+          "    '/auth/verify-2fa'",
+          "];",
+          "// /auth/social (initiate) and /auth/social/complete are anonymous;",
+          "// /auth/social/link and /auth/social/link/complete are authenticated.",
+          "const isSocialAnon = url.includes('/auth/social') && !url.includes('/auth/social/link');",
+          "if (isSocialAnon || anonPaths.some(p => url.includes(p))) {",
+          "    return;",
+          "}",
+          "",
+          "// Reuse the existing token if it is still valid (60 s buffer).",
+          "const existing = pm.variables.get('access_token');",
+          "if (existing) {",
+          "    try {",
+          "        const parts = existing.split('.');",
+          "        if (parts.length === 3) {",
+          "            const padded  = parts[1].replace(/-/g, '+').replace(/_/g, '/');",
+          "            const decoded = JSON.parse(CryptoJS.enc.Utf8.stringify(",
+          "                CryptoJS.enc.Base64.parse(padded)",
+          "            ));",
+          "            const now = Math.floor(Date.now() / 1000);",
+          "            if (decoded.exp && decoded.exp > now + 60) {",
+          "                console.log('[Nova.CommonUX] access_token still valid — skipping refresh.');",
+          "                return;",
+          "            }",
+          "        }",
+          "    } catch (_) { /* malformed token — fall through to regenerate */ }",
+          "}",
+          "",
+          "// Validate required variables are present.",
+          "const required = ['jwt_secret', 'tenant_id', 'company_code', 'branch_code', 'user_id'];",
+          "for (const key of required) {",
+          "    if (!pm.variables.get(key)) {",
+          "        throw new Error('[Nova.CommonUX] Missing variable: ' + key +",
+          "            '. Add it to your active environment or collection variables.');",
+          "    }",
+          "}",
+          "",
+          "// Build and sign the JWT.",
+          "const base64url = (obj) =>",
+          "    CryptoJS.enc.Base64",
+          "        .stringify(CryptoJS.enc.Utf8.parse(JSON.stringify(obj)))",
+          "        .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
+          "",
+          "const now = Math.floor(Date.now() / 1000);",
+          "",
+          "const header  = base64url({ alg: 'HS256', typ: 'JWT' });",
+          "const payload = base64url({",
+          "    iss:        pm.variables.get('jwt_issuer')   || 'https://auth.nova.internal',",
+          "    aud:        pm.variables.get('jwt_audience') || 'nova-api',",
+          "    sub:        pm.variables.get('user_id'),",
+          "    tenant_id:  pm.variables.get('tenant_id'),",
+          "    company_code: pm.variables.get('company_code'),",
+          "    branch_code:  pm.variables.get('branch_code'),",
+          "    user_id:    pm.variables.get('user_id'),",
+          "    iat: now,",
+          "    exp: now + 3600",
+          "});",
+          "",
+          "const signingInput = header + '.' + payload;",
+          "const rawSig       = CryptoJS.HmacSHA256(signingInput, pm.variables.get('jwt_secret'));",
+          "const signature    = CryptoJS.enc.Base64.stringify(rawSig)",
+          "    .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
+          "",
+          "const token = signingInput + '.' + signature;",
+          "",
+          "// Write to collection variables (takes precedence over globals).",
+          "// Also write to environment if one is active.",
+          "pm.collectionVariables.set('access_token', token);",
+          "try { pm.environment.set('access_token', token); } catch (_) {}",
+          "",
+          "console.log('[Nova.CommonUX] access_token refreshed.');",
+          "console.log('  tenant_id: ' + pm.variables.get('tenant_id'));",
+          "console.log('  user_id:   ' + pm.variables.get('user_id'));",
+          "console.log('  expires:   ' + new Date((now + 3600) * 1000).toISOString());"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Obtain Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var json = pm.response.json();",
+                  "  if (json.token) {",
+                  "    pm.environment.set(\"access_token\", json.token);",
+                  "    console.log(\"access_token updated automatically\");",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"client_secret\": \"your-client-secret\"\n}"
+            },
+            "description": "Authenticate the application instance. Does NOT receive auto-injected context fields. Store the returned token in {{access_token}}.\n\n\u2705 Auto-auth: The post-response script automatically sets {{access_token}} on success."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n  \"expires_in\": 3600\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"tenant_id\", \"message\": \"Required\" },\n    { \"field\": \"shared_password\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "User Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var json = pm.response.json();",
+                  "  if (json.token) {",
+                  "    pm.environment.set(\"access_token\", json.token);",
+                  "    console.log(\"access_token updated automatically\");",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"user_id\": \"U001\",\n  \"password\": \"your-password\"\n}"
+            },
+            "description": "Log in a user. Does NOT receive auto-injected context fields. When requires_2fa is true, use the session_token with Verify 2FA.\n\n\u2705 Auto-auth: The post-response script automatically sets {{access_token}} on success (when token is non-empty)."
+          },
+          "response": [
+            {
+              "name": "Success (no 2FA)",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"token\": \"eyJ...\",\n  \"expires_in\": 3600,\n  \"requires_2fa\": false,\n  \"session_token\": null,\n  \"refresh_token\": \"opaque-refresh-token-value\",\n  \"user\": {\n    \"user_id\": \"U001\",\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane@example.com\",\n    \"avatar_url\": \"https://cdn.example.com/avatars/user-123.jpg\"\n  }\n}"
+            },
+            {
+              "name": "Requires 2FA",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"token\": \"\",\n  \"expires_in\": 0,\n  \"requires_2fa\": true,\n  \"session_token\": \"temp-session-token\"\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"user_id\", \"message\": \"Required\" },\n    { \"field\": \"password\", \"message\": \"Must be at least 8 characters\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Verify 2FA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var json = pm.response.json();",
+                  "  if (json.token) {",
+                  "    pm.environment.set(\"access_token\", json.token);",
+                  "    console.log(\"access_token updated automatically\");",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/verify-2fa",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify-2fa"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_token\": \"temp-session-token\",\n  \"code\": \"123456\"\n}"
+            },
+            "description": "Verify a TOTP 2FA code using the session_token from the login response.\n\n\u2705 Auto-auth: The post-response script automatically sets {{access_token}} on success."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"token\": \"eyJ...\",\n  \"expires_in\": 3600,\n  \"requires_2fa\": false,\n  \"user\": {\n    \"user_id\": \"U001\",\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane@example.com\",\n    \"avatar_url\": \"https://cdn.example.com/avatars/user-123.jpg\"\n  }\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"session_token\", \"message\": \"Required\" },\n    { \"field\": \"code\", \"message\": \"Must be a 6-digit numeric code\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/forgot-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"user_id\": \"U001\"\n}"
+            },
+            "description": "Request a password reset email for the given User ID."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"If this user exists, a reset email has been sent.\"\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"user_id\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/reset-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"reset-token-from-email\",\n  \"new_password\": \"new-secure-password\"\n}"
+            },
+            "description": "Reset password using the token from the reset email."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Password has been reset successfully.\"\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"token\", \"message\": \"Required\" },\n    { \"field\": \"new_password\", \"message\": \"Must be at least 8 characters with one uppercase, one lowercase, and one number\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Magic Link (Request)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/magic-link",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "magic-link"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"email\": \"jane@example.com\"\n}"
+            },
+            "description": "Send a magic link to the user's email for passwordless login."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"If this email is registered, a magic link has been sent.\"\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"email\", \"message\": \"Must be a valid email address\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Magic Link (Verify)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var json = pm.response.json();",
+                  "  if (json.token) {",
+                  "    pm.environment.set(\"access_token\", json.token);",
+                  "    console.log(\"access_token updated automatically\");",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/magic-link/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "magic-link",
+                "verify"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"magic-link-token-from-email\"\n}"
+            },
+            "description": "Verify a magic link token to complete passwordless login.\n\n\u2705 Auto-auth: The post-response script automatically sets {{access_token}} on success."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"token\": \"eyJ...\",\n  \"expires_in\": 3600,\n  \"requires_2fa\": false,\n  \"session_token\": null,\n  \"refresh_token\": \"opaque-refresh-token-value\",\n  \"user\": {\n    \"user_id\": \"magic-user\",\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane@example.com\",\n    \"avatar_url\": null\n  }\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"token\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Social Auth (Initiate)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/social",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "social"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"google\",\n  \"callback_url\": \"https://app.example.com/login\"\n}"
+            },
+            "description": "Initiate social auth flow. Provider can be 'google', 'microsoft', or 'apple'. Redirect the user to the returned URL."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"redirect_url\": \"https://accounts.google.com/o/oauth2/v2/auth?client_id=...\"\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"provider\", \"message\": \"Must be one of: google, microsoft, apple\" },\n    { \"field\": \"callback_url\", \"message\": \"Must be a valid URL\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Social Auth (Complete)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var json = pm.response.json();",
+                  "  if (json.token) {",
+                  "    pm.environment.set(\"access_token\", json.token);",
+                  "    console.log(\"access_token updated automatically\");",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/social/complete",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "social",
+                "complete"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"provider\": \"google\",\n  \"social_token\": \"token-from-oauth-callback\"\n}"
+            },
+            "description": "Complete the social auth flow after the OAuth callback returns a social_token. Requires tenant_id, provider, and social_token.\n\n\u2705 Auto-auth: The post-response script automatically sets {{access_token}} on success."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"token\": \"eyJ...\",\n  \"expires_in\": 3600,\n  \"requires_2fa\": false,\n  \"session_token\": null,\n  \"refresh_token\": \"opaque-refresh-token-value\",\n  \"user\": {\n    \"user_id\": \"google-user\",\n    \"name\": \"Google User\",\n    \"email\": \"google@example.com\",\n    \"avatar_url\": \"https://lh3.googleusercontent.com/...\"\n  }\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"social_token\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var json = pm.response.json();",
+                  "  if (json.token) {",
+                  "    pm.environment.set(\"access_token\", json.token);",
+                  "    console.log(\"access_token updated automatically\");",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"your-opaque-refresh-token\"\n}"
+            },
+            "description": "Refresh an expiring JWT token. Requires a valid Bearer token in the Authorization header and the opaque refresh_token from the login/magic-link/social response. Returns a new JWT and a rotated refresh_token.\n\n\u2705 Auto-auth: The post-response script automatically sets {{access_token}} on success."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"token\": \"eyJ...\",\n  \"expires_in\": 3600,\n  \"refresh_token\": \"new-rotated-refresh-token\"\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"authorization\", \"message\": \"Bearer token is malformed\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Social Link (Initiate)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/social/link",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "v1", "auth", "social", "link" ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"google\",\n  \"callback_url\": \"https://app.example.com/social-link-callback\"\n}"
+            },
+            "description": "Authenticated user initiates linking a new social provider. Requires Bearer token. Returns an OAuth redirect URL. State param encodes the callback URL + authenticated identity so the complete step can resolve the account."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "body": "{\n  \"redirect_url\": \"https://accounts.google.com/o/oauth2/v2/auth?client_id=...\"\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "body": "{\n  \"errors\": { \"provider\": [\"provider is required. Valid values: google, microsoft, apple.\"], \"callback_url\": [\"callback_url is required.\"] }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Social Link (Complete)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/social/link/complete",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "v1", "auth", "social", "link", "complete" ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"google\",\n  \"social_token\": \"token-from-oauth-callback\"\n}"
+            },
+            "description": "Authenticated user completes linking a social provider. Requires Bearer token. tenant_id and user_id are read from JWT claims — do not send them in the body. Returns 409 if this provider is already linked to any account."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "body": "{\n  \"message\": \"Social account linked successfully.\",\n  \"provider\": \"google\",\n  \"provider_email\": \"user@gmail.com\"\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "409 Conflict",
+              "status": "Conflict",
+              "code": 409,
+              "header": [ { "key": "Content-Type", "value": "application/problem+json" } ],
+              "body": "{\n  \"title\": \"Conflict\",\n  \"detail\": \"This provider is already linked to an account.\",\n  \"status\": 409\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "body": "{\n  \"errors\": { \"provider\": [\"provider is required.\"], \"social_token\": [\"social_token is required.\"] }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Configuration",
+      "item": [
+        {
+          "name": "Tenant Config",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tenant-config",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tenant-config"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\"\n}"
+            },
+            "description": "Fetch tenant configuration. Context fields are auto-injected by the frontend but must be included manually in Postman."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"tenant_id\": \"T001\",\n  \"tenant_name\": \"Acme Travel Group \u2013 London HQ\",\n  \"company_code\": \"C001\",\n  \"company_name\": \"Acme Travel Group\",\n  \"branch_code\": \"BR001\",\n  \"branch_name\": \"London HQ\",\n  \"active_users_inline_threshold\": 20,\n  \"client_logo_url\": \"https://cdn.example.com/logos/acme.png\",\n  \"client_name\": \"Acme Travel Group\",\n  \"unclosed_web_enquiries_url\": \"https://crm.example.com/web-enquiries\",\n  \"task_list_url\": \"https://crm.example.com/tasks\",\n  \"breadcrumb_position\": \"inline\",\n  \"footer_gradient_refresh_ms\": 300000,\n  \"ux_version\": \"1.2.0\",\n  \"api_version\": \"1.0.0\",\n  \"enabled_auth_methods\": [\"google\", \"microsoft\", \"apple\", \"magic_link\"]\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"tenant_id\", \"message\": \"Required\" },\n    { \"field\": \"company_code\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Menus",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/novadhruv-mainapp-menus",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "novadhruv-mainapp-menus"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\"\n}"
+            },
+            "description": "Fetch navigation menus for the current user. Items may include external_url for opening in new tabs."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": \"dashboard\",\n    \"label\": \"Dashboard\",\n    \"icon\": \"layout-dashboard\",\n    \"route\": \"/dashboard\",\n    \"external_url\": \"\",\n    \"external_url_param_mode\": \"none\"\n  },\n  {\n    \"id\": \"crm-dashboard\",\n    \"label\": \"CRM\",\n    \"icon\": \"monitor\",\n    \"external_url\": \"https://crm.example.com/view\",\n    \"external_url_param_mode\": \"query\"\n  },\n  {\n    \"id\": \"sales\",\n    \"label\": \"Sales\",\n    \"icon\": \"trending-up\",\n    \"children\": [\n      { \"id\": \"sales-pipeline\", \"label\": \"Pipeline\", \"route\": \"/sales/pipeline\" },\n      { \"id\": \"sales-reports\", \"label\": \"Reports\", \"external_url\": \"https://reports.example.com/{tenant_id}/user/{user_id}\", \"external_url_param_mode\": \"path\" }\n    ]\n  }\n]"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            },
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+            },
+            {
+              "name": "422 Unprocessable Entity",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"tenant_id\", \"message\": \"Required\" },\n    { \"field\": \"user_id\", \"message\": \"Required\" }\n  ]\n}"
+            },
+            {
+              "name": "429 Too Many Requests",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+            },
+            {
+              "name": "500 Internal Server Error",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

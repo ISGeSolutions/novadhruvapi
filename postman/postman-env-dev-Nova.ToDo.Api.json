@@ -1,0 +1,8 @@
+{
+  "id": "dev-env-todo",
+  "name": "Nova.ToDo.Api – Dev",
+  "_postman_variable_scope": "environment",
+  "values": [
+    { "key": "base_url", "value": "http://localhost:5101", "type": "default", "enabled": true }
+  ]
+}

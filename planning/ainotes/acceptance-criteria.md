@@ -20,12 +20,19 @@ Repo root is the directory that contains `novadhruv.slnx`.
 - [ ] `novadhruv.slnx` exists at repo root
 - [ ] `src/shared/Nova.Shared/Nova.Shared.csproj` exists
 - [ ] `src/shared/Nova.Shared.Web/Nova.Shared.Web.csproj` exists
-- [ ] `src/services/Nova.Shell.Api/Nova.Shell.Api.csproj` exists
 - [ ] `src/host/Nova.AppHost/Nova.AppHost.csproj` exists
 - [ ] `aspire.config.json` exists at repo root (points to AppHost csproj)
 - [ ] `Nova.Shared.Web.csproj` references `Nova.Shared` via `<ProjectReference>`
-- [ ] `Nova.Shell.Api.csproj` references both `Nova.Shared` and `Nova.Shared.Web` via `<ProjectReference>` (not NuGet)
-- [ ] `Nova.AppHost.csproj` references `Nova.Shell.Api` via `<ProjectReference>` (no `IsAspireProjectResource` attribute needed)
+
+**Services (all must exist):**
+- [ ] `src/services/Nova.Shell.Api/Nova.Shell.Api.csproj`
+- [ ] `src/services/Nova.ToDo.Api/Nova.ToDo.Api.csproj`
+- [ ] `src/services/Nova.CommonUX.Api/Nova.CommonUX.Api.csproj`
+- [ ] `src/services/Nova.Presets.Api/Nova.Presets.Api.csproj`
+
+**AppHost wiring (all services must be referenced):**
+- [ ] `Nova.AppHost.csproj` references all four service projects via `<ProjectReference>` (no `IsAspireProjectResource` attribute needed)
+- [ ] Each service `.csproj` references both `Nova.Shared` and `Nova.Shared.Web` via `<ProjectReference>` (not NuGet)
 
 ---
 
@@ -45,6 +52,8 @@ Repo root is the directory that contains `novadhruv.slnx`.
 - [ ] PackageReference: `MySqlConnector` version `2.*`
 - [ ] PackageReference: `Serilog.AspNetCore` version `9.*`
 - [ ] PackageReference: `Serilog.Sinks.File` version `6.*`
+- [ ] PackageReference: `Serilog.Sinks.OpenTelemetry` version `4.*`
+- [ ] PackageReference: `Serilog.Sinks.Seq` version `8.*`
 - [ ] PackageReference: `OpenTelemetry.Extensions.Hosting` version `1.*`
 - [ ] PackageReference: `OpenTelemetry.Exporter.OpenTelemetryProtocol` version `1.*`
 - [ ] PackageReference: `OpenTelemetry.Instrumentation.Runtime` version `1.*`
@@ -90,7 +99,10 @@ Repo root is the directory that contains `novadhruv.slnx`.
 - [ ] `<RootNamespace>Nova.AppHost</RootNamespace>`
 - [ ] No `<IsAspireHost>true</IsAspireHost>` property — this is a deprecated workload-era flag
 - [ ] No `<PackageReference Include="Aspire.Hosting.AppHost" />` — handled by the SDK
-- [ ] ProjectReference to `Nova.Shell.Api.csproj` (plain reference, no `IsAspireProjectResource`)
+- [ ] PackageReference: `Aspire.Hosting.Redis` version `9.*`
+- [ ] PackageReference: `Aspire.Hosting.RabbitMQ` version `9.*`
+- [ ] PackageReference: `Aspire.Hosting.Seq` version `9.*`
+- [ ] ProjectReferences to all four service projects (plain references, no `IsAspireProjectResource`)
 
 ---
 

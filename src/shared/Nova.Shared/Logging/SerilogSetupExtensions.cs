@@ -12,8 +12,30 @@ namespace Nova.Shared.Logging;
 public static class SerilogSetupExtensions
 {
     /// <summary>
-    /// Configures Serilog with file sinks, enrichers, and a dynamic level switch
-    /// driven by <see cref="TimeWindowLevelEvaluator"/> and <see cref="OpsSettings"/>.
+    /// Configures Serilog for all Nova services. Call once from each service's <c>Program.cs</c>.
+    ///
+    /// <para><b>Sink pipeline (always active):</b></para>
+    /// <list type="bullet">
+    ///   <item>Console — human-readable, for <c>dotnet run</c> and container stdout.</item>
+    ///   <item>File: <c>logs/audit-.log</c> — rolling daily, Information+. Permanent audit trail.</item>
+    /// </list>
+    ///
+    /// <para><b>Sink pipeline (conditionally active):</b></para>
+    /// <list type="bullet">
+    ///   <item>File: <c>logs/debug-.log</c> — rolling daily, Debug+.
+    ///         Active when <c>opsettings.json Logging.EnableDiagnosticLogging = true</c>.</item>
+    ///   <item>OpenTelemetry (OTLP) — streams logs to the Aspire dashboard in real time.
+    ///         Active when <c>OTEL_EXPORTER_OTLP_ENDPOINT</c> env var is set (injected by Aspire automatically).</item>
+    ///   <item>Seq — persists structured logs for cross-service querying at <c>http://localhost:5341</c>.
+    ///         Active when <c>ConnectionStrings:seq</c> is present (injected by Aspire when
+    ///         <c>Infrastructure:UseSeq = true</c> in <c>Nova.AppHost/appsettings.json</c>).
+    ///         Silently skipped outside Aspire: tests, <c>dotnet run</c> standalone.</item>
+    /// </list>
+    ///
+    /// <para><b>Sink ownership:</b> all sink decisions live here in <c>Nova.Shared</c>.
+    /// <c>Nova.AppHost</c> owns which infrastructure containers start and injects their endpoints;
+    /// this method consumes those endpoints. Services call <c>AddNovaLogging()</c> and are
+    /// otherwise unaware of what sinks are active.</para>
     /// </summary>
     public static IHostApplicationBuilder AddNovaLogging(this IHostApplicationBuilder builder)
     {
@@ -23,7 +45,7 @@ public static class SerilogSetupExtensions
         LogEventLevel initialLevel = TimeWindowLevelEvaluator.Evaluate(initialOps.Logging);
         LoggingLevelSwitch levelSwitch = new(initialLevel);
 
-        // Aspire injects OTEL_EXPORTER_OTLP_ENDPOINT — use it for Structured logs in the dashboard.
+        // Injected by Aspire automatically when the service is started via Nova.AppHost.
         string? otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT");
 
         LoggerConfiguration loggerConfig = new LoggerConfiguration()
@@ -53,6 +75,14 @@ public static class SerilogSetupExtensions
             loggerConfig.WriteTo.OpenTelemetry(
                 endpoint: otlpEndpoint.TrimEnd('/') + "/v1/logs",
                 protocol: Serilog.Sinks.OpenTelemetry.OtlpProtocol.Grpc);
+        }
+
+        // Seq — injected by Aspire as ConnectionStrings:seq when UseSeq = true in AppHost.
+        // Silently skipped when running outside Aspire (tests, standalone dotnet run).
+        string? seqUrl = builder.Configuration.GetConnectionString("seq");
+        if (!string.IsNullOrEmpty(seqUrl))
+        {
+            loggerConfig.WriteTo.Seq(seqUrl);
         }
 
         Log.Logger = loggerConfig.CreateLogger();

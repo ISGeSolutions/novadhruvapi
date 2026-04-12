@@ -1,6 +1,6 @@
 {
   "Logging": {
-    "DefaultLevel": "Information",
+    "DefaultLevel": "Debug",
     "EnableRequestResponseLogging": false,
     "EnableDiagnosticLogging": false,
     "Windows": [
@@ -18,6 +18,11 @@
     "Enabled": false,
     "PollingIntervalSeconds": 5,
     "BatchSize": 50
+  },
+  "SqlLogging": {
+    "Enabled": true,
+    "LogLevel": "Debug",
+    "IncludeParameters": true
   },
   "Caching": {
     "GloballyEnabled": true,

@@ -1,8 +1,16 @@
--- V001: Create Nova outbox table (Postgres)
--- Used by the outbox relay (Task 13) to guarantee at-least-once delivery of domain events.
--- Safe to run automatically — no destructive operations.
+-- ============================================================
+-- Nova.Shell.Api — dhruvlog schema
+-- Postgres dialect
+-- Connect to the target application database first, then run.
+-- dhruvlog is a schema (not a separate database).
+-- ============================================================
 
-CREATE TABLE nova_outbox (
+CREATE SCHEMA IF NOT EXISTS dhruvlog;
+
+-- ------------------------------------------------------------
+-- nova_outbox
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS dhruvlog.nova_outbox (
     id              UUID              NOT NULL  DEFAULT gen_random_uuid()  PRIMARY KEY,
     aggregate_id    VARCHAR(100)      NOT NULL,
     event_type      VARCHAR(200)      NOT NULL,
@@ -13,6 +21,6 @@ CREATE TABLE nova_outbox (
     last_error      TEXT              NULL
 );
 
-CREATE INDEX IX_nova_outbox_unprocessed
-    ON nova_outbox (created_at)
+CREATE INDEX ix_nova_outbox_unprocessed
+    ON dhruvlog.nova_outbox (created_at)
     WHERE processed_at IS NULL;

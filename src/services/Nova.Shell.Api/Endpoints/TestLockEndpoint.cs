@@ -75,8 +75,8 @@ public static class TestLockEndpoint
     // ── Step 1: choose a key that uniquely identifies the protected resource ────────────
     //
     //   Tenant-scoped operation:   "tenant:{tenantId}:{entity}:{id}"
-    //   e.g.                       "tenant:BLDK:booking:create:BK-001"
-    //   e.g.                       "tenant:BLDK:payment:PAY-999"
+    //   e.g.                       "tenant:BTDK:booking:create:BK-001"
+    //   e.g.                       "tenant:BTDK:payment:PAY-999"
     //
     //   Global background job:     "nova:job:{job-name}"
     //   e.g.                       "nova:job:send-reminders"
