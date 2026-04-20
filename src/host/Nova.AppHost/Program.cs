@@ -69,6 +69,11 @@ var presets = builder.AddProject<Projects.Nova_Presets_Api>("presets")
                      .WithEnvironment("ENCRYPTION_KEY", encryptionKey);
 if (seq is not null) presets.WithReference(seq).WaitFor(seq);
 
+// OpsGroups.Api — no Redis or RabbitMQ dependency (Phase a: reads AuthDb only).
+var opsgroups = builder.AddProject<Projects.Nova_OpsGroups_Api>("opsgroups")
+                       .WithEnvironment("ENCRYPTION_KEY", encryptionKey);
+if (seq is not null) opsgroups.WithReference(seq).WaitFor(seq);
+
 builder.Build().Run();
 
 // ---------------------------------------------------------------------------

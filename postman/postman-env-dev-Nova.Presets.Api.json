@@ -3,6 +3,7 @@
   "name": "Nova.Presets.Api – Dev",
   "_postman_variable_scope": "environment",
   "values": [
-    { "key": "base_url", "value": "http://localhost:5103", "type": "default", "enabled": true }
+    { "key": "base_url", "value": "http://localhost:5103", "type": "default", "enabled": true },
+    { "key": "code", "value": "VISA", "type": "default", "enabled": true }
   ]
 }

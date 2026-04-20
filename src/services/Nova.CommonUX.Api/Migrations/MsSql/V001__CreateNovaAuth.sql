@@ -15,10 +15,10 @@ BEGIN
         client_secret_hash  varchar(500)    NOT NULL,
         frz_ind             bit             NOT NULL DEFAULT 0,
         created_by          varchar(10)     NOT NULL,
-        created_on          datetime2       NOT NULL,
+        created_on          datetimeoffset  NOT NULL,
         updated_by          varchar(10)     NOT NULL,
-        updated_on          datetime2       NOT NULL,
-        updated_at          varchar(50)    NOT NULL,
+        updated_on          datetimeoffset  NOT NULL,
+        updated_at          varchar(50)     NOT NULL,
         CONSTRAINT pk_tenant_secrets PRIMARY KEY (tenant_id)
     );
 END
@@ -38,13 +38,13 @@ BEGIN
         totp_enabled            bit             NOT NULL DEFAULT 0,
         totp_secret_encrypted   varchar(500)    NULL,
         failed_login_count      int             NOT NULL DEFAULT 0,
-        locked_until            datetime2       NULL,
-        last_login_on           datetime2       NULL,
+        locked_until            datetimeoffset           NULL,
+        last_login_on           datetimeoffset           NULL,
         frz_ind                 bit             NOT NULL DEFAULT 0,
         created_by              varchar(10)     NOT NULL,
-        created_on              datetime2       NOT NULL,
+        created_on              datetimeoffset           NOT NULL,
         updated_by              varchar(10)     NOT NULL,
-        updated_on              datetime2       NOT NULL,
+        updated_on              datetimeoffset           NOT NULL,
         updated_at              varchar(50)    NOT NULL,
         CONSTRAINT pk_tenant_user_auth PRIMARY KEY (tenant_id, user_id)
     );
@@ -66,9 +66,9 @@ BEGIN
         avatar_url      varchar(500)    NULL,
         frz_ind         bit             NOT NULL DEFAULT 0,
         created_by      varchar(10)     NOT NULL,
-        created_on      datetime2       NOT NULL,
+        created_on      datetimeoffset           NOT NULL,
         updated_by      varchar(10)     NOT NULL,
-        updated_on      datetime2       NOT NULL,
+        updated_on      datetimeoffset           NOT NULL,
         updated_at      varchar(50)    NOT NULL,
         CONSTRAINT pk_tenant_user_profile PRIMARY KEY (tenant_id, user_id)
     );
@@ -89,12 +89,12 @@ BEGIN
         provider            varchar(50)     NOT NULL,
         provider_user_id    varchar(255)    NULL,
         provider_email      varchar(255)    NOT NULL,
-        linked_on           datetime2       NULL,
+        linked_on           datetimeoffset           NULL,
         frz_ind             bit             NOT NULL DEFAULT 0,
         created_by          varchar(10)     NOT NULL,
-        created_on          datetime2       NOT NULL,
+        created_on          datetimeoffset           NOT NULL,
         updated_by          varchar(10)     NOT NULL,
-        updated_on          datetime2       NOT NULL,
+        updated_on          datetimeoffset           NOT NULL,
         updated_at          varchar(50)    NOT NULL,
         CONSTRAINT pk_tenant_user_social_identity PRIMARY KEY (tenant_id, user_id, provider)
     );
@@ -115,9 +115,9 @@ BEGIN
         user_id     varchar(10)         NOT NULL,
         token_hash  varchar(500)        NOT NULL,
         token_type  varchar(50)         NOT NULL,
-        expires_on  datetime2           NOT NULL,
-        used_on     datetime2           NULL,
-        created_on  datetime2           NOT NULL,
+        expires_on  datetimeoffset    NOT NULL,
+        used_on     datetimeoffset    NULL,
+        created_on  datetimeoffset    NOT NULL,
         CONSTRAINT pk_tenant_auth_tokens PRIMARY KEY (id)
     );
 END
@@ -125,7 +125,7 @@ GO
 
 -- ------------------------------------------------------------
 -- tenant_config
--- One row per (tenant_id, CompanyCode, BranchCode).
+-- One row per (tenant_id, company_code, branch_code).
 -- UX and branding configuration.
 -- ------------------------------------------------------------
 IF OBJECT_ID('nova_auth.dbo.tenant_config', 'U') IS NULL
@@ -133,8 +133,8 @@ BEGIN
     CREATE TABLE nova_auth.dbo.tenant_config
     (
         tenant_id                       varchar(10)     NOT NULL,
-        CompanyCode                      varchar(10)     NOT NULL,
-        BranchCode                       varchar(10)     NOT NULL,
+        company_code                    varchar(10)     NOT NULL,
+        branch_code                     varchar(10)     NOT NULL,
         tenant_name                     varchar(50)    NOT NULL,
         company_name                    varchar(50)    NOT NULL,
         branch_name                     varchar(50)    NOT NULL,
@@ -147,45 +147,15 @@ BEGIN
         footer_gradient_refresh_ms      int             NOT NULL DEFAULT 300000,
         frz_ind                         bit             NOT NULL DEFAULT 0,
         created_by                      varchar(10)     NOT NULL,
-        created_on                      datetime2       NOT NULL,
+        created_on                      datetimeoffset           NOT NULL,
         updated_by                      varchar(10)     NOT NULL,
-        updated_on                      datetime2       NOT NULL,
+        updated_on                      datetimeoffset           NOT NULL,
         updated_at                      varchar(50)    NOT NULL,
-        CONSTRAINT pk_tenant_config PRIMARY KEY (tenant_id, CompanyCode, BranchCode)
+        CONSTRAINT pk_tenant_config PRIMARY KEY (tenant_id, company_code, branch_code)
     );
 END
 GO
 
--- ------------------------------------------------------------
--- tenant_menu_items
--- Navigation menu items per tenant. Parent/child nesting via parent_id.
--- Role filtering via required_roles.
--- ------------------------------------------------------------
-IF OBJECT_ID('nova_auth.dbo.tenant_menu_items', 'U') IS NULL
-BEGIN
-    CREATE TABLE nova_auth.dbo.tenant_menu_items
-    (
-        menu_item_id            varchar(10)     NOT NULL,
-        tenant_id               varchar(10)     NOT NULL,
-        parent_id               varchar(10)     NULL,
-        label                   varchar(200)    NOT NULL,
-        icon                    varchar(100)    NULL,
-        route                   varchar(500)    NULL,
-        external_url_template   varchar(500)    NULL,
-        external_url_param_mode varchar(20)     NOT NULL DEFAULT 'none',
-        required_roles          varchar(500)    NULL,
-        sort_order              int             NOT NULL DEFAULT 0,
-        is_active               bit             NOT NULL DEFAULT 1,
-        frz_ind                 bit             NOT NULL DEFAULT 0,
-        created_by              varchar(10)     NOT NULL,
-        created_on              datetime2       NOT NULL,
-        updated_by              varchar(10)     NOT NULL,
-        updated_on              datetime2       NOT NULL,
-        updated_at              varchar(50)    NOT NULL,
-        CONSTRAINT pk_tenant_menu_items PRIMARY KEY (menu_item_id, tenant_id)
-    );
-END
-GO
 
 -- ------------------------------------------------------------
 -- Indexes
@@ -222,10 +192,3 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_tenant_auth_tokens_has
         WHERE used_on IS NULL;
 GO
 
--- Menu items by tenant and sort order
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_tenant_menu_items_tenant'
-               AND object_id = OBJECT_ID('nova_auth.dbo.tenant_menu_items'))
-    CREATE INDEX ix_tenant_menu_items_tenant
-        ON nova_auth.dbo.tenant_menu_items (tenant_id, sort_order)
-        WHERE is_active = 1 AND frz_ind = 0;
-GO

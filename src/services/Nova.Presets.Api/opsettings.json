@@ -4,7 +4,7 @@
     "EnableRequestResponseLogging": false,
     "EnableDiagnosticLogging": false,
     "Windows": [
-      { "Name": "PeakMorning",     "Start": "07:00", "End": "10:00", "Level": "Warning" },
+      { "Name": "PeakMorning",     "Start": "07:00", "End": "22:00", "Level": "Debug" },
       { "Name": "DiagnosticNight", "Start": "22:00", "End": "02:00", "Level": "Debug"   }
     ]
   },
@@ -40,6 +40,7 @@
   "Email": {
     "Provider": "SendGrid",
     "SendGrid": {
+      "ApiKey": "",
       "SenderAddress": "noreply@novaplatform.io",
       "SenderDisplayName": "Nova Platform"
     }

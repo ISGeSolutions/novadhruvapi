@@ -28,6 +28,7 @@ internal static class PresetsDbHelper
 
         if (isMsSql)
         {
+            // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
             return """
                    SELECT br.BranchCode, br.BranchName, co.CompanyCode, co.CompanyName
                    FROM   presets.dbo.Branch  br
@@ -218,6 +219,58 @@ internal static class PresetsDbHelper
                                     `updated_at`           = VALUES(`updated_at`)
                                 """
         };
+    }
+
+    /// <summary>
+    /// Returns the dialect-correct query for ops team members, filtered by role codes
+    /// and optionally by a list of branch codes.
+    /// When <paramref name="branchCodeFilter"/> is empty, the XXXX-wildcard scope is used.
+    /// Parameters: @TenantId, @CompanyCode, @RoleCodes (array), @BranchFilter (array, may be empty).
+    /// </summary>
+    internal static string UsersByRoleQuerySql(AuthDbSettings authDb, string[] roleCodes, string[]? branchCodeFilter)
+    {
+        ISqlDialect dialect   = Dialect(authDb.DbType);
+        string      rights    = dialect.TableRef("nova_auth", "user_security_rights");
+        string      profile   = dialect.TableRef("nova_auth", "tenant_user_profile");
+        string      falsy     = dialect.BooleanLiteral(false);
+        bool        hasBranchFilter = branchCodeFilter is { Length: > 0 };
+
+        string branchClause = hasBranchFilter
+            ? "AND r.branch_code IN @BranchFilter"
+            : "AND (r.branch_code = @BranchCode OR r.branch_code = 'XXXX')";
+
+        return $"""
+                SELECT  r.user_id         AS UserId,
+                        p.display_name    AS DisplayName,
+                        r.role_code       AS RoleCode
+                FROM    {rights}  r
+                JOIN    {profile} p ON p.tenant_id = r.tenant_id
+                                   AND p.user_id   = r.user_id
+                WHERE   r.tenant_id    = @TenantId
+                AND     (r.company_code = @CompanyCode OR r.company_code = 'XXXX')
+                {branchClause}
+                AND     r.role_code    IN @RoleCodes
+                AND     r.frz_ind      = {falsy}
+                AND     p.frz_ind      = {falsy}
+                ORDER BY p.display_name, r.role_code
+                """;
+    }
+
+    /// <summary>
+    /// Returns the dialect-correct query for all permissions assigned to a user.
+    /// Parameters: @TenantId, @UserId.
+    /// </summary>
+    internal static string UserPermissionsQuerySql(PresetsDbSettings presetsDb)
+    {
+        ISqlDialect dialect = Dialect(presetsDb.DbType);
+        string      table   = dialect.TableRef("presets", "tenant_user_permissions");
+
+        return $"""
+                SELECT permission_code AS PermissionCode
+                FROM   {table}
+                WHERE  tenant_id = @TenantId
+                AND    user_id   = @UserId
+                """;
     }
 
     /// <summary>

@@ -39,6 +39,11 @@ public static class JwtSetupExtensions
                 // Enable full exception detail in logs — remove once auth is confirmed working.
                 IdentityModelEventSource.ShowPII = true;
 
+                // Preserve JWT claim names as-is (sub, tenant_id, etc.).
+                // Without this, the middleware maps "sub" → ClaimTypes.NameIdentifier,
+                // breaking FindFirstValue(JwtRegisteredClaimNames.Sub) across all endpoints.
+                options.MapInboundClaims = false;
+
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer           = true,

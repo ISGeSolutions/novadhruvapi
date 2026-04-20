@@ -1,0 +1,28 @@
+{
+  "id": "dev-env-shell",
+  "name": "Nova.Shell.Api \u2013 Dev",
+  "_postman_variable_scope": "environment",
+  "values": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5100",
+      "type": "default",
+      "enabled": true,
+      "description": "Nova.Shell.Api listen address."
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Set automatically by the collection pre-request script. Do not edit by hand."
+    },
+    {
+      "key": "internal_token",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Service-to-service Bearer token for internal auth endpoints. Set manually for testing internal routes."
+    }
+  ]
+}

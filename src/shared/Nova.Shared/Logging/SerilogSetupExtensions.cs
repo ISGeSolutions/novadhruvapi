@@ -90,6 +90,10 @@ public static class SerilogSetupExtensions
 
         builder.Services.AddSingleton(levelSwitch);
 
+        // Keeps the level switch in sync when opsettings.json is hot-reloaded
+        // (e.g. DefaultLevel or time-window level changes take effect without a restart).
+        builder.Services.AddHostedService<LogLevelSynchroniser>();
+
         return builder;
     }
 }

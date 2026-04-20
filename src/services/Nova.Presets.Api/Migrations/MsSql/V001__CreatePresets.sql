@@ -53,9 +53,9 @@ BEGIN
         status_note  varchar(200)      NULL,
         frz_ind      bit           NOT NULL DEFAULT 0,
         created_by   varchar(10)   NOT NULL,
-        created_on   datetime2     NOT NULL,
+        created_on   datetimeoffset     NOT NULL,
         updated_by   varchar(10)   NOT NULL,
-        updated_on   datetime2     NOT NULL,
+        updated_on   datetimeoffset     NOT NULL,
         updated_at   varchar(50)  NOT NULL,
         CONSTRAINT pk_tenant_user_status PRIMARY KEY (tenant_id, user_id)
     );
@@ -77,9 +77,9 @@ BEGIN
         user_id            varchar(10)      NOT NULL,
         new_password_hash  varchar(500)     NOT NULL,
         token_hash         varchar(500)     NOT NULL,
-        expires_on         datetime2        NOT NULL,
-        confirmed_on       datetime2            NULL,
-        created_on         datetime2        NOT NULL,
+        expires_on         datetimeoffset        NOT NULL,
+        confirmed_on       datetimeoffset            NULL,
+        created_on         datetimeoffset        NOT NULL,
         CONSTRAINT pk_tenant_password_change_requests PRIMARY KEY (id)
     );
 END

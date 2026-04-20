@@ -57,6 +57,13 @@ builder.Services.AddNovaApiVersioning();
 builder.Services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
 builder.Services.AddHttpContextAccessor();
 
+// Dapper global settings + type handlers
+DefaultTypeMap.MatchNamesWithUnderscores = true;   // map snake_case columns → PascalCase properties
+Nova.Shared.Data.DapperTypeHandlers.RegisterDateOnly();
+string? presetsDbType = builder.Configuration["PresetsDb:DbType"];
+if (presetsDbType is "MsSql" or "MariaDb")
+    Nova.Shared.Data.DapperTypeHandlers.RegisterDateTimeOffset();
+
 // 9. Problem Details (RFC 9457)
 builder.Services.AddNovaProblemDetails();
 
@@ -177,6 +184,9 @@ ConfirmPasswordChangeEndpoint.Map(v1);
 DefaultPasswordEndpoint.Map(v1);
 
 BranchesEndpoint.Map(v1);
+UsersByRoleEndpoint.Map(v1);
+TourGenericsEndpoint.Map(v1);
+TasksEndpoint.Map(v1);
 
 // ---------------------------------------------------------------------------
 // Unversioned diagnostic / admin endpoints

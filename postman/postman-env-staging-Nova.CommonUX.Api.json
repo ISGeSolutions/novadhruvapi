@@ -1,8 +1,48 @@
 {
   "id": "staging-env-commonux",
-  "name": "Nova.CommonUX.Api – Staging",
+  "name": "Nova.CommonUX.Api \u2013 Staging",
   "_postman_variable_scope": "environment",
   "values": [
-    { "key": "base_url", "value": "https://staging-commonux-api.novadhruv.com", "type": "default", "enabled": true }
+    {
+      "key": "base_url",
+      "value": "https://flj5z2np-5102.uks1.devtunnels.ms",
+      "type": "default",
+      "enabled": true,
+      "description": "Nova.CommonUX.Api staging tunnel address."
+    },
+    {
+      "key": "client_secret",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Plaintext client secret for /auth/token. Hash with nova-cipher argon2 and store in nova_auth.tenant_secrets."
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Set automatically by the collection pre-request script. Do not edit by hand."
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Captured automatically from login/magic-link/social response. Used by the Refresh Token request."
+    },
+    {
+      "key": "session_token",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Captured automatically from /auth/login when requires_2fa is true. Used by the Verify 2FA request."
+    },
+    {
+      "key": "enabled_auth_methods",
+      "value": "google,microsoft,apple,magic_link",
+      "type": "default",
+      "enabled": true
+    }
   ]
 }

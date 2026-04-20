@@ -1,0 +1,42 @@
+{
+  "id": "nova-globals",
+  "name": "Nova Platform \u2013 Globals",
+  "_postman_variable_scope": "globals",
+  "values": [
+    {
+      "key": "tenant_id",
+      "value": "BTDK",
+      "type": "default",
+      "enabled": true,
+      "description": "Default tenant for all Nova services. Override in a service env if testing a different tenant."
+    },
+    {
+      "key": "company_code",
+      "value": "BTDK",
+      "type": "default",
+      "enabled": true,
+      "description": "Company within the tenant."
+    },
+    {
+      "key": "branch_code",
+      "value": "DK",
+      "type": "default",
+      "enabled": true,
+      "description": "Branch within the company."
+    },
+    {
+      "key": "user_id",
+      "value": "ISG",
+      "type": "default",
+      "enabled": true,
+      "description": "Developer user identifier. Injected as JWT sub and user_id claims by all pre-request scripts."
+    },
+    {
+      "key": "jwt_secret",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Shared JWT signing secret. Decrypt Jwt:SecretKey from any service appsettings.json using: nova-cipher decrypt <value>. Set once here \u2014 all services use the same secret."
+    }
+  ]
+}

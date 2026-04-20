@@ -53,6 +53,7 @@ public static class DeleteToDoEndpoint
 
         using IDbConnection connection = connectionFactory.CreateForTenant(tenantContext);
 
+        // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
         DateTime? dbUpdatedOn = await connection.ExecuteScalarAsync<DateTime?>(
             $"SELECT UpdatedOn FROM {todo} WHERE SeqNo = @SeqNo",
             new { SeqNo = seqNo }, commandTimeout: 30);

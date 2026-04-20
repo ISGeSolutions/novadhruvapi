@@ -3,6 +3,7 @@
   "name": "Nova.Presets.Api – Production",
   "_postman_variable_scope": "environment",
   "values": [
-    { "key": "base_url", "value": "https://presets-api.novadhruv.com", "type": "default", "enabled": true }
+    { "key": "base_url", "value": "https://presets-api.novadhruv.com", "type": "default", "enabled": true },
+    { "key": "code", "value": "VISA", "type": "default", "enabled": true }
   ]
 }

@@ -53,8 +53,9 @@ public static class FreezeToDoEndpoint
 
         using IDbConnection connection = connectionFactory.CreateForTenant(tenantContext);
 
+        // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
         CurrentRow? current = await connection.QuerySingleOrDefaultAsync<CurrentRow>(
-            $"SELECT SeqNo, FrzInd, UpdatedOn FROM {todo} WHERE SeqNo = @SeqNo",
+            $"SELECT SeqNo, ISNULL(FrzInd, 0) AS frz_ind, UpdatedOn FROM {todo} WHERE SeqNo = @SeqNo",
             new { SeqNo = seqNo }, commandTimeout: 30);
 
         if (current is null)

@@ -71,6 +71,7 @@ public static class SummaryByUserEndpoint
 
         // All aggregate queries filter: frz_ind = false, AssignedToUserCode = @UserCode
         // TODO (item 5): DueDate/DoneOn/CreatedOn comparisons assume datetime — review CAST for Postgres/MariaDB.
+        // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
         string sql = $"""
             SELECT
                 -- Due today, by priority

@@ -3,6 +3,7 @@
   "name": "Nova.Presets.Api – Staging",
   "_postman_variable_scope": "environment",
   "values": [
-    { "key": "base_url", "value": "https://staging-presets-api.novadhruv.com", "type": "default", "enabled": true }
+    { "key": "base_url", "value": "https://staging-presets-api.novadhruv.com", "type": "default", "enabled": true },
+    { "key": "code", "value": "VISA", "type": "default", "enabled": true }
   ]
 }

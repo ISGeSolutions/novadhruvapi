@@ -118,7 +118,9 @@ public static class ChangePasswordEndpoint
 
         // Step 3: Hash new password and generate confirmation token
         string newPasswordHash    = Argon2idHasher.Hash(request.NewPassword!);
-        string confirmationToken  = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
+        // URL-safe base64 (no +/= chars) so the token can be used directly in URLs without URI-escaping
+        string confirmationToken  = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48))
+                                        .Replace('+', '-').Replace('/', '_').TrimEnd('=');
         string tokenHash          = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(confirmationToken)));
         var    now                = PresetsDbHelper.UtcNow();
         int    expiryMins         = changePasswordMonitor.CurrentValue.TokenExpiryMinutes;
@@ -146,7 +148,7 @@ public static class ChangePasswordEndpoint
                 """,
                 new
                 {
-                    Id              = Guid.NewGuid(),
+                    Id              = Guid.CreateVersion7(),
                     request.TenantId,
                     request.UserId,
                     NewPasswordHash = newPasswordHash,
@@ -161,7 +163,7 @@ public static class ChangePasswordEndpoint
         if (!string.IsNullOrWhiteSpace(email))
         {
             string appBaseUrl = configuration["AppBaseUrl"] ?? "http://localhost:3000";
-            string link       = $"{appBaseUrl.TrimEnd('/')}/confirm-password-change?token={Uri.EscapeDataString(confirmationToken)}";
+            string link       = $"{appBaseUrl.TrimEnd('/')}/confirm-password-change?token={confirmationToken}";
 
             await emailSender.SendAsync(
                 email,

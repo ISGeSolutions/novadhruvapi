@@ -90,7 +90,7 @@ public static class ResetPasswordEndpoint
             UPDATE {userAuth}
             SET password_hash = @Hash,
                 updated_on    = @Now,
-                updated_by    = 'password-reset',
+                updated_by    = 'pwd-reset',
                 updated_at    = 'Nova.CommonUX.Api'
             WHERE tenant_id = @TenantId AND user_id = @UserId
             """,
@@ -103,11 +103,18 @@ public static class ResetPasswordEndpoint
         return TypedResults.Ok(new MessageResponse("Password has been reset successfully."));
     }
 
-    private sealed record TokenRow(Guid Id, string TenantId, string UserId, DateTimeOffset ExpiresOn, DateTimeOffset? UsedOn);
+    private sealed record TokenRow
+    {
+        public Guid            Id        { get; set; }
+        public string          TenantId  { get; set; } = string.Empty;
+        public string          UserId    { get; set; } = string.Empty;
+        public DateTimeOffset  ExpiresOn { get; set; }
+        public DateTimeOffset? UsedOn    { get; set; }
+    }
 
     private sealed record ResetPasswordRequest
     {
-        public string? Token       { get; init; }
-        public string? NewPassword { get; init; }
+        public string? Token       { get; set; }
+        public string? NewPassword { get; set; }
     }
 }

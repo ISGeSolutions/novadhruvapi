@@ -49,6 +49,7 @@
   "Email": {
     "Provider": "SendGrid",
     "SendGrid": {
+      "ApiKey": "",
       "SenderAddress": "noreply@example.com",
       "SenderDisplayName": "Nova Platform"
     }

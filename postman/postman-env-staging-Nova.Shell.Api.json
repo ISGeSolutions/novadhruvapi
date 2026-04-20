@@ -1,0 +1,28 @@
+{
+  "id": "staging-env-shell",
+  "name": "Nova.Shell.Api \u2013 Staging",
+  "_postman_variable_scope": "environment",
+  "values": [
+    {
+      "key": "baseUrl",
+      "value": "https://flj5z2np-5100.uks1.devtunnels.ms",
+      "type": "default",
+      "enabled": true,
+      "description": "Nova.Shell.Api staging tunnel address."
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Set automatically by the collection pre-request script. Do not edit by hand."
+    },
+    {
+      "key": "internal_token",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Service-to-service Bearer token for internal auth endpoints. Set manually for testing internal routes."
+    }
+  ]
+}

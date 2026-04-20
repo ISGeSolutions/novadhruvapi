@@ -1,10 +1,11 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.2.2">
+﻿<Project Sdk="Aspire.AppHost.Sdk/13.2.2">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Nova.AppHost</RootNamespace>
+    <UserSecretsId>93018559-f358-4ae1-a9cd-b02d597d701b</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.Redis" Version="13.2.2" />
@@ -16,5 +17,6 @@
     <ProjectReference Include="..\..\services\Nova.ToDo.Api\Nova.ToDo.Api.csproj" />
     <ProjectReference Include="..\..\services\Nova.CommonUX.Api\Nova.CommonUX.Api.csproj" />
     <ProjectReference Include="..\..\services\Nova.Presets.Api\Nova.Presets.Api.csproj" />
+    <ProjectReference Include="..\..\services\Nova.OpsGroups.Api\Nova.OpsGroups.Api.csproj" />
   </ItemGroup>
 </Project>

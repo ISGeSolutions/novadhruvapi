@@ -65,17 +65,20 @@ public static class GetByTaskSourceEndpoint
         string whereClause = BuildWhereClause(request);
 
         // TODO (item 2): SELECT TOP 1 is MSSQL-only — replace with LIMIT 1 for Postgres/MariaDB.
+        // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
         string sql = $"""
             SELECT TOP 1
                 SeqNo, JobCode, TaskDetail, AssignedToUserCode, PriorityCode,
-                DueDate, DueTime, InFlexibleInd, StartDate, StartTime,
-                AssignedByUserCode, AssignedOn, Remark, EstJobTime,
+                DueDate, FORMAT(DueTime, 'HH:mm') AS due_time, InFlexibleInd,
+                StartDate, FORMAT(StartTime, 'HH:mm') AS start_time,
+                AssignedByUserCode, AssignedOn, Remark,
+                FORMAT(EstJobTime, 'HH:mm') AS est_job_time,
                 ClientName, BkgNo, QuoteNo, CampaignCode,
-                Accountcode_Client, Brochure_Code_Short, DepDate, SupplierCode,
+                Accountcode_Client, Brochure_Code_Short AS tour_series_code, DepDate, SupplierCode,
                 SendEMailToInd, SentMailInd, AlertToInd, SendSMSInd, SendSMSTo,
                 Travel_PNRNo, SeqNo_Charges, SeqNo_AcctNotes, Itinerary_No,
                 DoneInd, DoneBy, DoneOn,
-                FrzInd, CreatedBy, CreatedOn, UpdatedBy, UpdatedOn, UpdatedAt
+                ISNULL(FrzInd, 0) AS frz_ind, CreatedBy, CreatedOn, UpdatedBy, UpdatedOn, UpdatedAt
             FROM {todo}
             WHERE {whereClause}
               AND DoneInd = {doneOff}

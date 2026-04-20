@@ -7,7 +7,7 @@ ALTER TABLE dhruvlog.dbo.nova_outbox ADD routing_key    NVARCHAR(200) NOT NULL D
 ALTER TABLE dhruvlog.dbo.nova_outbox ADD content_type   NVARCHAR(100) NOT NULL DEFAULT 'application/json';
 ALTER TABLE dhruvlog.dbo.nova_outbox ADD max_retries    INT           NOT NULL DEFAULT 5;
 ALTER TABLE dhruvlog.dbo.nova_outbox ADD status         NVARCHAR(20)  NOT NULL DEFAULT 'pending';
-ALTER TABLE dhruvlog.dbo.nova_outbox ADD scheduled_on   DATETIME2     NULL;
+ALTER TABLE dhruvlog.dbo.nova_outbox ADD scheduled_on   datetimeoffset NULL;
 ALTER TABLE dhruvlog.dbo.nova_outbox ADD correlation_id NVARCHAR(100) NULL;
 
 -- Index for the relay's pending-message poll.

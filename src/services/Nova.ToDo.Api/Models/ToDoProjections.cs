@@ -2,7 +2,8 @@ namespace Nova.ToDo.Api.Models;
 
 /// <summary>
 /// Projects raw Dapper <see cref="ToDoRow"/> records into API response types.
-/// Handles the MSSQL datetime → DateOnly / string "HH:mm" / DateTimeOffset conversions.
+/// Time-only columns (DueTime, StartTime, EstJobTime) are already "HH:mm" strings
+/// via FORMAT aliases in every SELECT query — no C# conversion needed.
 /// </summary>
 internal static class ToDoProjections
 {
@@ -10,7 +11,7 @@ internal static class ToDoProjections
     // MSSQL datetime convention:
     //   All datetime columns arrive from ADO.NET as DateTime (Kind = Unspecified).
     //   DateOnly columns: discard the time component via DateOnly.FromDateTime().
-    //   Time-only columns (DueTime, StartTime, EstJobTime): format as "HH:mm".
+    //   Time-only columns: already "HH:mm" strings from FORMAT() SQL alias.
     //   Audit/event timestamps: treat as UTC via DateTime.SpecifyKind(Utc),
     //   then wrap as DateTimeOffset.
     // -----------------------------------------------------------------------
@@ -22,20 +23,20 @@ internal static class ToDoProjections
         AssignedToUserCode: r.AssignedToUserCode,
         PriorityCode:       r.PriorityCode,
         DueDate:            DateOnly.FromDateTime(r.DueDate),
-        DueTime:            r.DueTime.HasValue     ? r.DueTime.Value.ToString("HH:mm")     : null,
+        DueTime:            r.DueTime,
         InFlexibleInd:      r.InFlexibleInd,
         StartDate:          r.StartDate.HasValue   ? DateOnly.FromDateTime(r.StartDate.Value) : null,
-        StartTime:          r.StartTime.HasValue   ? r.StartTime.Value.ToString("HH:mm")   : null,
+        StartTime:          r.StartTime,
         AssignedByUserCode: r.AssignedByUserCode,
         AssignedOn:         r.AssignedOn.HasValue  ? ToUtcOffset(r.AssignedOn.Value)        : null,
         Remark:             r.Remark,
-        EstJobTime:         r.EstJobTime.HasValue  ? r.EstJobTime.Value.ToString("HH:mm")  : null,
+        EstJobTime:         r.EstJobTime,
         ClientName:         r.ClientName,
         BkgNo:              r.BkgNo,
         QuoteNo:            r.QuoteNo,
         CampaignCode:       r.CampaignCode,
         AccountCodeClient:  r.AccountcodeClient,
-        TourSeriesCode:     r.BrochureCodeShort,
+        TourSeriesCode:     r.TourSeriesCode,
         DepDate:            r.DepDate.HasValue     ? DateOnly.FromDateTime(r.DepDate.Value) : null,
         SupplierCode:       r.SupplierCode,
         SendEMailToInd:     r.SendEMailToInd,

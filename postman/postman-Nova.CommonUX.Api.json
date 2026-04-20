@@ -28,7 +28,7 @@
         "type": "text/javascript",
         "exec": [
           "// -----------------------------------------------------------------------",
-          "// Nova.CommonUX.Api — Auto JWT",
+          "// Nova.CommonUX.Api \u2014 Auto JWT",
           "// Generates a fresh HS256 token if none exists or the existing one is",
           "// within 60 seconds of expiry. Reads from environment / collection vars.",
           "// Required variables: jwt_secret, tenant_id, company_code, branch_code, user_id",
@@ -38,7 +38,7 @@
           "",
           "// Skip token generation for anonymous endpoints.",
           "// Note: /auth/social/link, /auth/social/link/complete, and /auth/refresh",
-          "// are NOT anonymous — they require a Bearer token and are not skipped.",
+          "// are NOT anonymous \u2014 they require a Bearer token and are not skipped.",
           "const url = pm.request.url.toString();",
           "const anonPaths = [",
           "    '/hello', '/health',",
@@ -66,11 +66,11 @@
           "            ));",
           "            const now = Math.floor(Date.now() / 1000);",
           "            if (decoded.exp && decoded.exp > now + 60) {",
-          "                console.log('[Nova.CommonUX] access_token still valid — skipping refresh.');",
+          "                console.log('[Nova.CommonUX] access_token still valid \u2014 skipping refresh.');",
           "                return;",
           "            }",
           "        }",
-          "    } catch (_) { /* malformed token — fall through to regenerate */ }",
+          "    } catch (_) { /* malformed token \u2014 fall through to regenerate */ }",
           "}",
           "",
           "// Validate required variables are present.",
@@ -168,9 +168,9 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"client_secret\": \"your-client-secret\"\n}"
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"client_secret\": \"{{client_secret}}\"\n}"
             },
-            "description": "Authenticate the application instance. Does NOT receive auto-injected context fields. Store the returned token in {{access_token}}.\n\n\u2705 Auto-auth: The post-response script automatically sets {{access_token}} on success."
+            "description": "Machine-to-machine token endpoint. Issues a JWT for the application instance using a tenant client secret verified via Argon2id.\n\nclient_secret is the plaintext value you chose when seeding nova_auth.tenant_secrets:\n  1. Generate hash:  nova-cipher argon2 <your-secret>\n  2. Insert hash into tenant_secrets.client_secret_hash\n  3. Set {{client_secret}} in your environment to that same plaintext value\n\nSee: src/services/Nova.CommonUX.Api/docs/nova-commonux-api-guide.md \u2192 Seeding Required Data \u2192 1. tenant_secrets\n\nDoes NOT require a Bearer token \u2014 this is the bootstrap endpoint.\n\u2705 Auto-auth: The post-response script automatically sets {{access_token}} on success."
           },
           "response": [
             {
@@ -277,6 +277,14 @@
                   "    pm.environment.set(\"access_token\", json.token);",
                   "    console.log(\"access_token updated automatically\");",
                   "  }",
+                  "  if (json.refresh_token) {",
+                  "    pm.environment.set(\"refresh_token\", json.refresh_token);",
+                  "    console.log(\"refresh_token captured\");",
+                  "  }",
+                  "  if (json.session_token) {",
+                  "    pm.environment.set(\"session_token\", json.session_token);",
+                  "    console.log(\"session_token captured (2FA required)\");",
+                  "  }",
                   "}"
                 ]
               }
@@ -319,7 +327,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"token\": \"eyJ...\",\n  \"expires_in\": 3600,\n  \"requires_2fa\": false,\n  \"session_token\": null,\n  \"refresh_token\": \"opaque-refresh-token-value\",\n  \"user\": {\n    \"user_id\": \"U001\",\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane@example.com\",\n    \"avatar_url\": \"https://cdn.example.com/avatars/user-123.jpg\"\n  }\n}"
+              "body": "{\n  \"token\": \"eyJ...\",\n  \"expires_in\": 3600,\n  \"requires_2fa\": false,\n  \"session_token\": null,\n  \"refresh_token\": \"opaque-refresh-token-value\",\n  \"user\": {\n    \"user_id\": \"U001\",\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane@example.com\",\n    \"avatar_url\": \"https://cdn.example.com/avatars/user-123.jpg\",\n    \"program_id_root\": \"DHRUV\"\n  }\n}"
             },
             {
               "name": "Requires 2FA",
@@ -425,6 +433,10 @@
                   "    pm.environment.set(\"access_token\", json.token);",
                   "    console.log(\"access_token updated automatically\");",
                   "  }",
+                  "  if (json.refresh_token) {",
+                  "    pm.environment.set(\"refresh_token\", json.refresh_token);",
+                  "    console.log(\"refresh_token captured after 2FA\");",
+                  "  }",
                   "}"
                 ]
               }
@@ -452,7 +464,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"session_token\": \"temp-session-token\",\n  \"code\": \"123456\"\n}"
+              "raw": "{\n  \"session_token\": \"{{session_token}}\",\n  \"code\": \"123456\"\n}"
             },
             "description": "Verify a TOTP 2FA code using the session_token from the login response.\n\n\u2705 Auto-auth: The post-response script automatically sets {{access_token}} on success."
           },
@@ -467,7 +479,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"token\": \"eyJ...\",\n  \"expires_in\": 3600,\n  \"requires_2fa\": false,\n  \"user\": {\n    \"user_id\": \"U001\",\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane@example.com\",\n    \"avatar_url\": \"https://cdn.example.com/avatars/user-123.jpg\"\n  }\n}"
+              "body": "{\n  \"token\": \"eyJ...\",\n  \"expires_in\": 3600,\n  \"requires_2fa\": false,\n  \"user\": {\n    \"user_id\": \"U001\",\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane@example.com\",\n    \"avatar_url\": \"https://cdn.example.com/avatars/user-123.jpg\",\n    \"program_id_root\": \"DHRUV\"\n  }\n}"
             },
             {
               "name": "401 Unauthorized",
@@ -961,7 +973,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"token\": \"eyJ...\",\n  \"expires_in\": 3600,\n  \"requires_2fa\": false,\n  \"session_token\": null,\n  \"refresh_token\": \"opaque-refresh-token-value\",\n  \"user\": {\n    \"user_id\": \"magic-user\",\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane@example.com\",\n    \"avatar_url\": null\n  }\n}"
+              "body": "{\n  \"token\": \"eyJ...\",\n  \"expires_in\": 3600,\n  \"requires_2fa\": false,\n  \"session_token\": null,\n  \"refresh_token\": \"opaque-refresh-token-value\",\n  \"user\": {\n    \"user_id\": \"magic-user\",\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane@example.com\",\n    \"avatar_url\": null,\n    \"program_id_root\": \"DHRUV\"\n  }\n}"
             },
             {
               "name": "401 Unauthorized",
@@ -1217,7 +1229,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"token\": \"eyJ...\",\n  \"expires_in\": 3600,\n  \"requires_2fa\": false,\n  \"session_token\": null,\n  \"refresh_token\": \"opaque-refresh-token-value\",\n  \"user\": {\n    \"user_id\": \"google-user\",\n    \"name\": \"Google User\",\n    \"email\": \"google@example.com\",\n    \"avatar_url\": \"https://lh3.googleusercontent.com/...\"\n  }\n}"
+              "body": "{\n  \"token\": \"eyJ...\",\n  \"expires_in\": 3600,\n  \"requires_2fa\": false,\n  \"session_token\": null,\n  \"refresh_token\": \"opaque-refresh-token-value\",\n  \"user\": {\n    \"user_id\": \"google-user\",\n    \"name\": \"Google User\",\n    \"email\": \"google@example.com\",\n    \"avatar_url\": \"https://lh3.googleusercontent.com/...\",\n    \"program_id_root\": \"DHRUV\"\n  }\n}"
             },
             {
               "name": "401 Unauthorized",
@@ -1311,6 +1323,10 @@
                   "    pm.environment.set(\"access_token\", json.token);",
                   "    console.log(\"access_token updated automatically\");",
                   "  }",
+                  "  if (json.refresh_token) {",
+                  "    pm.environment.set(\"refresh_token\", json.refresh_token);",
+                  "    console.log(\"refresh_token rotated and captured\");",
+                  "  }",
                   "}"
                 ]
               }
@@ -1338,7 +1354,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"refresh_token\": \"your-opaque-refresh-token\"\n}"
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
             },
             "description": "Refresh an expiring JWT token. Requires a valid Bearer token in the Authorization header and the opaque refresh_token from the login/magic-link/social response. Returns a new JWT and a rotated refresh_token.\n\n\u2705 Auto-auth: The post-response script automatically sets {{access_token}} on success."
           },
@@ -1445,8 +1461,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/auth/social/link",
-              "host": [ "{{base_url}}" ],
-              "path": [ "api", "v1", "auth", "social", "link" ]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "social",
+                "link"
+              ]
             },
             "body": {
               "mode": "raw",
@@ -1459,21 +1483,36 @@
               "name": "Success",
               "status": "OK",
               "code": 200,
-              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"redirect_url\": \"https://accounts.google.com/o/oauth2/v2/auth?client_id=...\"\n}"
             },
             {
               "name": "401 Unauthorized",
               "status": "Unauthorized",
               "code": 401,
-              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
             },
             {
               "name": "422 Unprocessable Entity",
               "status": "Unprocessable Entity",
               "code": 422,
-              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"errors\": { \"provider\": [\"provider is required. Valid values: google, microsoft, apple.\"], \"callback_url\": [\"callback_url is required.\"] }\n}"
             }
           ]
@@ -1490,42 +1529,71 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/auth/social/link/complete",
-              "host": [ "{{base_url}}" ],
-              "path": [ "api", "v1", "auth", "social", "link", "complete" ]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "social",
+                "link",
+                "complete"
+              ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"provider\": \"google\",\n  \"social_token\": \"token-from-oauth-callback\"\n}"
             },
-            "description": "Authenticated user completes linking a social provider. Requires Bearer token. tenant_id and user_id are read from JWT claims — do not send them in the body. Returns 409 if this provider is already linked to any account."
+            "description": "Authenticated user completes linking a social provider. Requires Bearer token. tenant_id and user_id are read from JWT claims \u2014 do not send them in the body. Returns 409 if this provider is already linked to any account."
           },
           "response": [
             {
               "name": "Success",
               "status": "OK",
               "code": 200,
-              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"message\": \"Social account linked successfully.\",\n  \"provider\": \"google\",\n  \"provider_email\": \"user@gmail.com\"\n}"
             },
             {
               "name": "401 Unauthorized",
               "status": "Unauthorized",
               "code": 401,
-              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
             },
             {
               "name": "409 Conflict",
               "status": "Conflict",
               "code": 409,
-              "header": [ { "key": "Content-Type", "value": "application/problem+json" } ],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/problem+json"
+                }
+              ],
               "body": "{\n  \"title\": \"Conflict\",\n  \"detail\": \"This provider is already linked to an account.\",\n  \"status\": 409\n}"
             },
             {
               "name": "422 Unprocessable Entity",
               "status": "Unprocessable Entity",
               "code": 422,
-              "header": [ { "key": "Content-Type", "value": "application/json" } ],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"errors\": { \"provider\": [\"provider is required.\"], \"social_token\": [\"social_token is required.\"] }\n}"
             }
           ]

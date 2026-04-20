@@ -135,7 +135,7 @@ public static class LoginEndpoint
         string userProfile = dialect.TableRef("nova_auth", "tenant_user_profile");
         ProfileRow? profile = await connection.QuerySingleOrDefaultAsync<ProfileRow>(
             $"""
-            SELECT display_name, email, avatar_url
+            SELECT display_name, email, avatar_url, program_id_root
             FROM {userProfile}
             WHERE tenant_id = @TenantId AND user_id = @UserId AND frz_ind = {dialect.BooleanLiteral(false)}
             """,
@@ -161,10 +161,11 @@ public static class LoginEndpoint
             SessionToken: null,
             RefreshToken: refreshToken,
             User: profile is null ? null : new UserInfo(
-                UserId:    request.UserId,
-                Name:      profile.DisplayName,
-                Email:     profile.Email,
-                AvatarUrl: profile.AvatarUrl)));
+                UserId:        request.UserId,
+                Name:          profile.DisplayName,
+                Email:         profile.Email,
+                AvatarUrl:     profile.AvatarUrl,
+                ProgramIdRoot: profile.ProgramIdRoot)));
     }
 
     private static IResult Unauthorized() =>
@@ -173,23 +174,29 @@ public static class LoginEndpoint
             detail:     "Invalid credentials.",
             statusCode: StatusCodes.Status401Unauthorized);
 
-    private sealed record AuthRow(
-        string          TenantId,
-        string          UserId,
-        string?         PasswordHash,
-        bool            TotpEnabled,
-        string?         TotpSecretEncrypted,
-        int             FailedLoginCount,
-        DateTimeOffset? LockedUntil,
-        DateTimeOffset? LastLoginOn,
-        bool            FrzInd);
+    // Init-property record: gives Dapper a parameterless constructor so it uses property-setter
+    // materialisation, which correctly handles Nullable<DateTimeOffset> columns.
+    // Positional records fail because GetFieldType() returns non-nullable DateTimeOffset and
+    // the constructor signature Nullable<DateTimeOffset> != DateTimeOffset at runtime.
+    private sealed record AuthRow
+    {
+        public string          TenantId            { get; set; } = string.Empty;
+        public string          UserId              { get; set; } = string.Empty;
+        public string?         PasswordHash        { get; set; }
+        public bool            TotpEnabled         { get; set; }
+        public string?         TotpSecretEncrypted { get; set; }
+        public int             FailedLoginCount    { get; set; }
+        public DateTimeOffset? LockedUntil         { get; set; }
+        public DateTimeOffset? LastLoginOn         { get; set; }
+        public bool            FrzInd              { get; set; }
+    }
 
-    private sealed record ProfileRow(string DisplayName, string Email, string? AvatarUrl);
+    private sealed record ProfileRow(string DisplayName, string Email, string? AvatarUrl, string? ProgramIdRoot);
 
     private sealed record LoginRequest
     {
-        public string  TenantId { get; init; } = string.Empty;
-        public string  UserId   { get; init; } = string.Empty;
-        public string? Password  { get; init; }
+        public string  TenantId { get; set; } = string.Empty;
+        public string  UserId   { get; set; } = string.Empty;
+        public string? Password  { get; set; }
     }
 }

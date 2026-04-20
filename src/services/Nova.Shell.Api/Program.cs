@@ -66,6 +66,13 @@ builder.Services.AddNovaApiVersioning();
 builder.Services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
 builder.Services.AddHttpContextAccessor();
 
+// Dapper global settings + type handlers
+DefaultTypeMap.MatchNamesWithUnderscores = true;   // map snake_case columns → PascalCase properties
+// Shell.Api serves multiple dialects via TenantRegistry; DateTimeOffsetTypeHandler is not
+// registered globally because existing MSSQL endpoints use manual DateTime.SpecifyKind(Utc)
+// conversion and Postgres (Npgsql) maps timestamptz ↔ DateTimeOffset natively.
+Nova.Shared.Data.DapperTypeHandlers.RegisterDateOnly();
+
 // 9. Problem Details (RFC 9457 error responses)
 builder.Services.AddNovaProblemDetails();
 

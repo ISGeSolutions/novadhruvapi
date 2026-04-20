@@ -3,20 +3,20 @@
 -- Safe to run automatically — CREATE TABLE IF NOT EXISTS, no destructive operations.
 
 CREATE TABLE IF NOT EXISTS `todo` (
-    `seq_no`                INT           NOT NULL AUTO_INCREMENT,
+    `id`                    CHAR(36)      NOT NULL,
     `job_code`              VARCHAR(4)    NOT NULL,
     `task_detail`           VARCHAR(255)  NOT NULL,
     `assigned_to_user_code` VARCHAR(10)   NOT NULL,
     `priority_code`         VARCHAR(2)    NOT NULL,
-    `due_date`              DATETIME      NOT NULL,
-    `due_time`              DATETIME      NULL,
+    `due_date`              DATE          NOT NULL,
+    `due_time`              VARCHAR(5)    NULL,
     `inflexible_ind`        TINYINT(1)    NOT NULL DEFAULT 0,
-    `start_date`            DATETIME      NULL,
-    `start_time`            DATETIME      NULL,
+    `start_date`            DATE          NULL,
+    `start_time`            VARCHAR(5)    NULL,
     `assigned_by_user_code` VARCHAR(10)   NOT NULL,
     `assigned_on`           DATETIME      NULL,
     `remark`                TEXT          NULL,
-    `est_job_time`          DATETIME      NULL,
+    `est_job_time`          VARCHAR(5)    NULL,
 
     `client_name`           VARCHAR(60)   NULL,
     `bkg_no`                INT           NULL,
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS `todo` (
     `campaign_code`         VARCHAR(16)   NULL,
     `account_code_client`   VARCHAR(10)   NULL,
     `tour_series_code`      VARCHAR(10)   NULL,
-    `dep_date`              DATETIME      NULL,
+    `dep_date`              DATE          NULL,
     `supplier_code`         VARCHAR(10)   NULL,
 
     `send_email_to_ind`     TINYINT(1)    NOT NULL DEFAULT 0,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS `todo` (
     `updated_on`            DATETIME      NOT NULL,
     `updated_at`            VARCHAR(50)   NOT NULL,
 
-    PRIMARY KEY (`seq_no`),
+    PRIMARY KEY (`id`),
     INDEX `ix_todo_assigned_to_user` (`assigned_to_user_code`, `done_ind`, `frz_ind`),
     INDEX `ix_todo_bkg_no`           (`bkg_no`),
     INDEX `ix_todo_quote_no`         (`quote_no`),

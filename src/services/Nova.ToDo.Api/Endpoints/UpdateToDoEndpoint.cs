@@ -59,6 +59,7 @@ public static class UpdateToDoEndpoint
 
         string todo = dialect.TableRef("sales97", "ToDo");
 
+        // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
         string fetchSql = $"""
             SELECT SeqNo, JobCode, TaskDetail, AssignedToUserCode, PriorityCode,
                    DueDate, DueTime, InFlexibleInd, StartDate, StartTime,
@@ -66,7 +67,7 @@ public static class UpdateToDoEndpoint
                    ClientName, BkgNo, QuoteNo, CampaignCode, Accountcode_Client,
                    Brochure_Code_Short, DepDate, SupplierCode,
                    SendEMailToInd, AlertToInd, SendSMSInd, SendSMSTo,
-                   DoneInd, FrzInd, UpdatedOn
+                   DoneInd, ISNULL(FrzInd, 0) AS frz_ind, UpdatedOn
             FROM {todo}
             WHERE SeqNo = @SeqNo
             """;
@@ -155,6 +156,7 @@ public static class UpdateToDoEndpoint
 
         // TODO (item 3): GETUTCDATE() is MSSQL-only — use NOW() AT TIME ZONE 'UTC' for Postgres, UTC_TIMESTAMP() for MariaDB.
         // TODO (item 3): For Postgres, use RETURNING updated_on instead of SELECT GETUTCDATE().
+        // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
         string updateSql = $"""
             UPDATE {todo}
             SET {string.Join(", ", setClauses)}

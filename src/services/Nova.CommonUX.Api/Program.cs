@@ -56,6 +56,13 @@ builder.Services.AddNovaApiVersioning();
 
 // 8. Data access (IDbConnectionFactory — shared library, used for nova_auth DB)
 builder.Services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
+
+// Dapper global settings + type handlers
+DefaultTypeMap.MatchNamesWithUnderscores = true;   // map snake_case columns → PascalCase properties
+Nova.Shared.Data.DapperTypeHandlers.RegisterDateOnly();
+string? authDbType = builder.Configuration["AuthDb:DbType"];
+if (authDbType is "MsSql" or "MariaDb")
+    Nova.Shared.Data.DapperTypeHandlers.RegisterDateTimeOffset();
 builder.Services.AddHttpContextAccessor();
 
 // 9. Problem Details (RFC 9457)
@@ -95,8 +102,14 @@ if (string.Equals(cacheProvider, "Redis", StringComparison.OrdinalIgnoreCase))
 else
     builder.Services.AddSingleton<ISessionStore, InMemorySessionStore>();
 
-// 17. Email sender
-builder.Services.AddSingleton<IEmailSender, SendGridEmailSender>();
+// 17. Email sender — use NoOp if no API key is configured (local dev without SendGrid)
+bool hasSendGridKey = !string.IsNullOrWhiteSpace(
+    builder.Configuration["Email:SendGrid:ApiKey"]);
+
+if (hasSendGridKey)
+    builder.Services.AddSingleton<IEmailSender, SendGridEmailSender>();
+else
+    builder.Services.AddSingleton<IEmailSender, NoOpEmailSender>();
 
 // 18. Social token verifier
 builder.Services.AddSingleton<ISocialTokenVerifier, SocialTokenVerifier>();
@@ -178,6 +191,7 @@ SocialLinkCompleteEndpoint.Map(v1);
 // Config endpoints — Bearer token required
 TenantConfigEndpoint.Map(v1);
 MainAppMenusEndpoint.Map(v1);
+PageConfigEndpoint.Map(v1);
 
 // ---------------------------------------------------------------------------
 // Unversioned diagnostic / admin endpoints

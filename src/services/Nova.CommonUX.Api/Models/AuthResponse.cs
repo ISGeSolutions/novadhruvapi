@@ -14,7 +14,8 @@ public sealed record UserInfo(
     string  UserId,
     string  Name,
     string  Email,
-    string? AvatarUrl);
+    string? AvatarUrl,
+    string? ProgramIdRoot);
 
 /// <summary>Response returned by <c>POST /api/v1/auth/token</c> (M2M).</summary>
 public sealed record AppTokenResponse(string Token, int ExpiresIn);

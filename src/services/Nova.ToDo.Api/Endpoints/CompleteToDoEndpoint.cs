@@ -56,6 +56,7 @@ public static class CompleteToDoEndpoint
 
         using IDbConnection connection = connectionFactory.CreateForTenant(tenantContext);
 
+        // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
         CurrentRow? current = await connection.QuerySingleOrDefaultAsync<CurrentRow>(
             $"SELECT SeqNo, DoneInd, UpdatedOn FROM {todo} WHERE SeqNo = @SeqNo",
             new { SeqNo = seqNo }, commandTimeout: 30);

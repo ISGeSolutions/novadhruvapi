@@ -58,5 +58,6 @@ public sealed class TokenService : ITokenService
 
     /// <inheritdoc/>
     public string GenerateRefreshToken() =>
-        Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
+        Convert.ToBase64String(RandomNumberGenerator.GetBytes(48))
+               .Replace('+', '-').Replace('/', '_').TrimEnd('=');
 }

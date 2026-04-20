@@ -5,6 +5,7 @@
   </Folder>
   <Folder Name="/src/services/">
     <Project Path="src/services/Nova.CommonUX.Api/Nova.CommonUX.Api.csproj" />
+    <Project Path="src/services/Nova.OpsGroups.Api/Nova.OpsGroups.Api.csproj" />
     <Project Path="src/services/Nova.Presets.Api/Nova.Presets.Api.csproj" />
     <Project Path="src/services/Nova.Shell.Api/Nova.Shell.Api.csproj" />
     <Project Path="src/services/Nova.ToDo.Api/Nova.ToDo.Api.csproj" />

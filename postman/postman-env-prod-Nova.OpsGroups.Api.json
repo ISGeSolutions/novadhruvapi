@@ -1,8 +1,21 @@
 {
   "id": "prod-env-opsgroups",
-  "name": "Nova.OpsGroups.Api – Production",
+  "name": "Nova.OpsGroups.Api \u2013 Production",
   "_postman_variable_scope": "environment",
   "values": [
-    { "key": "base_url", "value": "https://opsgroups-api.novadhruv.com", "type": "default", "enabled": true }
+    {
+      "key": "base_url",
+      "value": "https://opsgroups-api.novadhruv.com",
+      "type": "default",
+      "enabled": true,
+      "description": "Nova.OpsGroups.Api production address."
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Set automatically by the collection pre-request script. Do not edit by hand."
+    }
   ]
 }

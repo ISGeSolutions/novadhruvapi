@@ -102,6 +102,7 @@ public static class SummaryByContextEndpoint
             todayUtcStart, clientWindowDays, supplierWindowDays);
 
         // TODO (item 5): DueDate/DoneOn/CreatedOn comparisons assume datetime — review CAST for Postgres/MariaDB.
+        // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
         string sql = $"""
             SELECT
                 SUM(CASE WHEN DoneInd = {doneOff} AND DueDate >= @TodayStart AND DueDate <= @TodayEnd AND PriorityCode = 'H' THEN 1 ELSE 0 END) AS DueTodayHigh,

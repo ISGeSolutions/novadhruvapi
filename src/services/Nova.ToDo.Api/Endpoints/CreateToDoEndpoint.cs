@@ -99,6 +99,7 @@ public static class CreateToDoEndpoint
             (string taskSourceCol, object taskSourceVal) = GetTaskSourceFilter(request);
 
             // TODO (item 2): SELECT TOP 1 is MSSQL-only — replace with LIMIT 1 for Postgres/MariaDB.
+            // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
             string findSql = $"""
                 SELECT TOP 1 SeqNo, Remark, UpdatedOn, UpdatedBy, UpdatedAt,
                        JobCode, TaskDetail, AssignedToUserCode, PriorityCode, DueDate, DueTime,
@@ -150,6 +151,7 @@ public static class CreateToDoEndpoint
         // Scenario D: insert new record
         // TODO (item 3): GETUTCDATE() is MSSQL-only — use NOW() AT TIME ZONE 'UTC' for Postgres, UTC_TIMESTAMP() for MariaDB.
         // TODO (item 4): SELECT CAST(SCOPE_IDENTITY() AS INT) is MSSQL-only — use RETURNING id for Postgres, SELECT LAST_INSERT_ID() for MariaDB.
+        // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
         string insertSql = $"""
             INSERT INTO {todo} (
                 JobCode, TaskDetail, AssignedToUserCode, PriorityCode, DueDate, DueTime,
@@ -232,6 +234,7 @@ public static class CreateToDoEndpoint
         r.SeqNoAcctNotes is not null ? ("SeqNo_AcctNotes", (object)r.SeqNoAcctNotes) :
                                        ("Itinerary_No",    (object)r.ItineraryNo!);
 
+    // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
     // TODO (item 3): GETUTCDATE() is MSSQL-only — replace per dialect when adapting.
     private static string BuildUpdateSql(string todo, ISqlDialect dialect, bool includeRemark) =>
         $"""

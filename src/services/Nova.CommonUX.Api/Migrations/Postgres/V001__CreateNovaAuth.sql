@@ -128,30 +128,6 @@ CREATE TABLE IF NOT EXISTS nova_auth.tenant_config
     CONSTRAINT pk_tenant_config PRIMARY KEY (tenant_id, company_code, branch_code)
 );
 
--- ------------------------------------------------------------
--- tenant_menu_items
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS nova_auth.tenant_menu_items
-(
-    menu_item_id            varchar(10)     NOT NULL,
-    tenant_id               varchar(10)     NOT NULL,
-    parent_id               varchar(10)     NULL,
-    label                   varchar(200)    NOT NULL,
-    icon                    varchar(100)    NULL,
-    route                   varchar(500)    NULL,
-    external_url_template   varchar(500)    NULL,
-    external_url_param_mode varchar(20)     NOT NULL DEFAULT 'none',
-    required_roles          varchar(500)    NULL,
-    sort_order              integer         NOT NULL DEFAULT 0,
-    is_active               boolean         NOT NULL DEFAULT true,
-    frz_ind                 boolean         NOT NULL DEFAULT false,
-    created_by              varchar(10)     NOT NULL,
-    created_on              timestamptz     NOT NULL,
-    updated_by              varchar(10)     NOT NULL,
-    updated_on              timestamptz     NOT NULL,
-    updated_at              varchar(50)    NOT NULL,
-    CONSTRAINT pk_tenant_menu_items PRIMARY KEY (menu_item_id, tenant_id)
-);
 
 -- ------------------------------------------------------------
 -- Indexes
@@ -172,6 +148,3 @@ CREATE INDEX IF NOT EXISTS ix_tenant_auth_tokens_hash
     ON nova_auth.tenant_auth_tokens (token_hash, token_type)
     WHERE used_on IS NULL;
 
-CREATE INDEX IF NOT EXISTS ix_tenant_menu_items_tenant
-    ON nova_auth.tenant_menu_items (tenant_id, sort_order)
-    WHERE is_active = true AND frz_ind = false;

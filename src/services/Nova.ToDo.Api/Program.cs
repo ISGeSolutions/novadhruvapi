@@ -67,6 +67,18 @@ builder.Services.AddNovaApiVersioning();
 builder.Services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
 builder.Services.AddHttpContextAccessor();
 
+// Dapper global settings + type handlers
+DefaultTypeMap.MatchNamesWithUnderscores = true;   // map snake_case columns → PascalCase properties
+// DateOnly for all dialects; DateTimeOffset for MSSQL/MariaDB only.
+// (Npgsql maps timestamptz ↔ DateTimeOffset natively; registering the handler for Postgres breaks it.)
+// ToDo.Api is multi-tenant: infer from the Tenants config whether DateTimeOffsetTypeHandler is needed.
+Nova.Shared.Data.DapperTypeHandlers.RegisterDateOnly();
+bool todoHasMsSqlOrMariaDb = builder.Configuration.GetSection("Tenants")
+    .GetChildren()
+    .Any(t => t["DbType"] is "MsSql" or "MariaDb");
+if (todoHasMsSqlOrMariaDb)
+    Nova.Shared.Data.DapperTypeHandlers.RegisterDateTimeOffset();
+
 // 9. Problem Details (RFC 9457 error responses)
 builder.Services.AddNovaProblemDetails();
 

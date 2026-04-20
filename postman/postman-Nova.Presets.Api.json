@@ -21,96 +21,6 @@
       }
     ]
   },
-  "event": [
-    {
-      "listen": "prerequest",
-      "script": {
-        "type": "text/javascript",
-        "exec": [
-          "// -----------------------------------------------------------------------",
-          "// Nova.Presets.Api \u2014 Auto JWT",
-          "// Generates a fresh HS256 token if none exists or the existing one is",
-          "// within 60 seconds of expiry. Reads from environment / collection vars.",
-          "// Required variables: jwt_secret, tenant_id, company_code, branch_code, user_id",
-          "// Optional variables: jwt_issuer (default: https://auth.nova.internal)",
-          "//                     jwt_audience (default: nova-api)",
-          "// -----------------------------------------------------------------------",
-          "",
-          "// Skip token generation for anonymous endpoints.",
-          "const url = pm.request.url.toString();",
-          "if (url.includes('/hello') || url.includes('/health') || url.includes('/confirm-password-change')) {",
-          "    return;",
-          "}",
-          "",
-          "// Reuse the existing token if it is still valid (60 s buffer).",
-          "const existing = pm.variables.get('access_token');",
-          "if (existing) {",
-          "    try {",
-          "        const parts = existing.split('.');",
-          "        if (parts.length === 3) {",
-          "            const padded  = parts[1].replace(/-/g, '+').replace(/_/g, '/');",
-          "            const decoded = JSON.parse(CryptoJS.enc.Utf8.stringify(",
-          "                CryptoJS.enc.Base64.parse(padded)",
-          "            ));",
-          "            const now = Math.floor(Date.now() / 1000);",
-          "            if (decoded.exp && decoded.exp > now + 60) {",
-          "                console.log('[Nova.Presets] access_token still valid \u2014 skipping refresh.');",
-          "                return;",
-          "            }",
-          "        }",
-          "    } catch (_) { /* malformed token \u2014 fall through to regenerate */ }",
-          "}",
-          "",
-          "// Validate required variables are present.",
-          "const required = ['jwt_secret', 'tenant_id', 'company_code', 'branch_code', 'user_id'];",
-          "for (const key of required) {",
-          "    if (!pm.variables.get(key)) {",
-          "        throw new Error('[Nova.Presets] Missing variable: ' + key +",
-          "            '. Add it to your active environment or collection variables.');",
-          "    }",
-          "}",
-          "",
-          "// Build and sign the JWT.",
-          "const base64url = (obj) =>",
-          "    CryptoJS.enc.Base64",
-          "        .stringify(CryptoJS.enc.Utf8.parse(JSON.stringify(obj)))",
-          "        .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
-          "",
-          "const now = Math.floor(Date.now() / 1000);",
-          "",
-          "const header  = base64url({ alg: 'HS256', typ: 'JWT' });",
-          "const payload = base64url({",
-          "    iss:        pm.variables.get('jwt_issuer')   || 'https://auth.nova.internal',",
-          "    aud:        pm.variables.get('jwt_audience') || 'nova-api',",
-          "    sub:        pm.variables.get('user_id'),",
-          "    tenant_id:  pm.variables.get('tenant_id'),",
-          "    company_code: pm.variables.get('company_code'),",
-          "    branch_code:  pm.variables.get('branch_code'),",
-          "    user_id:    pm.variables.get('user_id'),",
-          "    iat: now,",
-          "    exp: now + 3600",
-          "});",
-          "",
-          "const signingInput = header + '.' + payload;",
-          "const rawSig       = CryptoJS.HmacSHA256(signingInput, pm.variables.get('jwt_secret'));",
-          "const signature    = CryptoJS.enc.Base64.stringify(rawSig)",
-          "    .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
-          "",
-          "const token = signingInput + '.' + signature;",
-          "",
-          "// Write to collection variables (takes precedence over globals).",
-          "// Also write to environment if one is active.",
-          "pm.collectionVariables.set('access_token', token);",
-          "try { pm.environment.set('access_token', token); } catch (_) {}",
-          "",
-          "console.log('[Nova.Presets] access_token refreshed.');",
-          "console.log('  tenant_id: ' + pm.variables.get('tenant_id'));",
-          "console.log('  user_id:   ' + pm.variables.get('user_id'));",
-          "console.log('  expires:   ' + new Date((now + 3600) * 1000).toISOString());"
-        ]
-      }
-    }
-  ],
   "item": [
     {
       "name": "User Profile",
@@ -165,7 +75,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Missing or expired token\"\n}"
             },
             {
               "name": "403 Forbidden",
@@ -177,7 +87,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"forbidden\",\n  \"status\": 403,\n  \"detail\": \"Insufficient permissions\"\n}"
             },
             {
               "name": "404 Not Found",
@@ -189,7 +99,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"not_found\",\n  \"status\": 404,\n  \"detail\": \"Resource not found\"\n}"
             },
             {
               "name": "422 Unprocessable Entity",
@@ -201,7 +111,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"tenant_id\", \"message\": \"Required\" },\n    { \"field\": \"user_id\", \"message\": \"Required\" }\n  ]\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"validation_error\",\n  \"status\": 422,\n  \"detail\": \"One or more fields failed validation\",\n  \"errors\": {\n    \"tenant_id\": [\n      \"Required\"\n    ],\n    \"user_id\": [\n      \"Required\"\n    ]\n  }\n}"
             },
             {
               "name": "429 Too Many Requests",
@@ -217,7 +127,7 @@
                   "value": "60"
                 }
               ],
-              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"rate_limited\",\n  \"status\": 429,\n  \"detail\": \"Too many requests. Please retry after the period specified in the Retry-After header.\"\n}"
             },
             {
               "name": "500 Internal Server Error",
@@ -229,7 +139,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"internal_error\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred\"\n}"
             }
           ]
         },
@@ -286,7 +196,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Missing or expired token\"\n}"
             },
             {
               "name": "403 Forbidden",
@@ -298,7 +208,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"forbidden\",\n  \"status\": 403,\n  \"detail\": \"Insufficient permissions\"\n}"
             },
             {
               "name": "404 Not Found",
@@ -310,7 +220,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"not_found\",\n  \"status\": 404,\n  \"detail\": \"Resource not found\"\n}"
             },
             {
               "name": "422 Unprocessable Entity",
@@ -322,7 +232,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"avatar\", \"message\": \"Required. Must be a JPEG, PNG, or WebP image under 5 MB\" }\n  ]\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"validation_error\",\n  \"status\": 422,\n  \"detail\": \"One or more fields failed validation\",\n  \"errors\": {\n    \"avatar\": [\n      \"Required. Must be a JPEG, PNG, or WebP image under 5 MB\"\n    ]\n  }\n}"
             },
             {
               "name": "429 Too Many Requests",
@@ -338,7 +248,7 @@
                   "value": "60"
                 }
               ],
-              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"rate_limited\",\n  \"status\": 429,\n  \"detail\": \"Too many requests. Please retry after the period specified in the Retry-After header.\"\n}"
             },
             {
               "name": "500 Internal Server Error",
@@ -350,7 +260,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"internal_error\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred\"\n}"
             }
           ]
         },
@@ -380,7 +290,7 @@
               "mode": "raw",
               "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\"\n}"
             },
-            "description": "Returns the tenant/company/branch-scoped list of presence status options from the database. Most specific scope wins when the same status_code exists at multiple levels (tenant-wide \u2192 company-wide \u2192 branch-specific)."
+            "description": "Fetch available status options (Available, Busy, In a Meeting, etc.) for the user profile status dropdown."
           },
           "response": [
             {
@@ -393,7 +303,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "[\n  { \"status_code\": \"available\",     \"label\": \"Available\",      \"colour\": \"#22c55e\" },\n  { \"status_code\": \"busy\",          \"label\": \"Busy\",            \"colour\": \"#ef4444\" },\n  { \"status_code\": \"in-meeting\",    \"label\": \"In a Meeting\",    \"colour\": \"#f59e0b\" },\n  { \"status_code\": \"out-of-office\", \"label\": \"Out of Office\",   \"colour\": \"#6b7280\" },\n  { \"status_code\": \"dnd\",           \"label\": \"Do Not Disturb\",  \"colour\": \"#dc2626\" }\n]"
+              "body": "[\n  { \"status_code\": \"available\", \"label\": \"Available\", \"colour\": \"#22c55e\" },\n  { \"status_code\": \"busy\", \"label\": \"Busy\", \"colour\": \"#ef4444\" },\n  { \"status_code\": \"in-meeting\", \"label\": \"In a Meeting\", \"colour\": \"#f59e0b\" },\n  { \"status_code\": \"out-of-office\", \"label\": \"Out of Office\", \"colour\": \"#6b7280\" },\n  { \"status_code\": \"dnd\", \"label\": \"Do Not Disturb\", \"colour\": \"#dc2626\" }\n]"
             },
             {
               "name": "401 Unauthorized",
@@ -405,7 +315,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Missing or expired token\"\n}"
             },
             {
               "name": "403 Forbidden",
@@ -417,7 +327,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"forbidden\",\n  \"status\": 403,\n  \"detail\": \"Insufficient permissions\"\n}"
             },
             {
               "name": "404 Not Found",
@@ -429,7 +339,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"not_found\",\n  \"status\": 404,\n  \"detail\": \"Resource not found\"\n}"
             },
             {
               "name": "422 Unprocessable Entity",
@@ -441,7 +351,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"tenant_id\", \"message\": \"Required\" }\n  ]\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"validation_error\",\n  \"status\": 422,\n  \"detail\": \"One or more fields failed validation\",\n  \"errors\": {\n    \"tenant_id\": [\n      \"Required\"\n    ]\n  }\n}"
             },
             {
               "name": "429 Too Many Requests",
@@ -457,7 +367,7 @@
                   "value": "60"
                 }
               ],
-              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"rate_limited\",\n  \"status\": 429,\n  \"detail\": \"Too many requests. Please retry after the period specified in the Retry-After header.\"\n}"
             },
             {
               "name": "500 Internal Server Error",
@@ -469,7 +379,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"internal_error\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred\"\n}"
             }
           ]
         },
@@ -524,7 +434,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Missing or expired token\"\n}"
             },
             {
               "name": "403 Forbidden",
@@ -536,7 +446,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"forbidden\",\n  \"status\": 403,\n  \"detail\": \"Insufficient permissions\"\n}"
             },
             {
               "name": "404 Not Found",
@@ -548,7 +458,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"not_found\",\n  \"status\": 404,\n  \"detail\": \"Resource not found\"\n}"
             },
             {
               "name": "422 Unprocessable Entity",
@@ -560,7 +470,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"status_id\", \"message\": \"Required. Must be a valid status option ID\" },\n    { \"field\": \"status_note\", \"message\": \"Must be 200 characters or fewer\" }\n  ]\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"validation_error\",\n  \"status\": 422,\n  \"detail\": \"One or more fields failed validation\",\n  \"errors\": {\n    \"status_id\": [\n      \"Required. Must be a valid status option ID\"\n    ],\n    \"status_note\": [\n      \"Must be 200 characters or fewer\"\n    ]\n  }\n}"
             },
             {
               "name": "429 Too Many Requests",
@@ -576,7 +486,7 @@
                   "value": "60"
                 }
               ],
-              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"rate_limited\",\n  \"status\": 429,\n  \"detail\": \"Too many requests. Please retry after the period specified in the Retry-After header.\"\n}"
             },
             {
               "name": "500 Internal Server Error",
@@ -588,7 +498,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"internal_error\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred\"\n}"
             }
           ]
         },
@@ -643,7 +553,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Missing or expired token\"\n}"
             },
             {
               "name": "403 Forbidden",
@@ -655,7 +565,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"forbidden\",\n  \"status\": 403,\n  \"detail\": \"Insufficient permissions\"\n}"
             },
             {
               "name": "404 Not Found",
@@ -667,7 +577,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"not_found\",\n  \"status\": 404,\n  \"detail\": \"Resource not found\"\n}"
             },
             {
               "name": "422 Unprocessable Entity",
@@ -679,7 +589,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"current_password\", \"message\": \"Required\" },\n    { \"field\": \"new_password\", \"message\": \"Must be at least 8 characters with one uppercase, one lowercase, and one number\" }\n  ]\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"validation_error\",\n  \"status\": 422,\n  \"detail\": \"One or more fields failed validation\",\n  \"errors\": {\n    \"current_password\": [\n      \"Required\"\n    ],\n    \"new_password\": [\n      \"Must be at least 8 characters with one uppercase, one lowercase, and one number\"\n    ]\n  }\n}"
             },
             {
               "name": "429 Too Many Requests",
@@ -695,7 +605,7 @@
                   "value": "60"
                 }
               ],
-              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"rate_limited\",\n  \"status\": 429,\n  \"detail\": \"Too many requests. Please retry after the period specified in the Retry-After header.\"\n}"
             },
             {
               "name": "500 Internal Server Error",
@@ -707,7 +617,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"internal_error\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred\"\n}"
             }
           ]
         },
@@ -836,7 +746,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"unauthorized\",\n  \"status\": 401,\n  \"detail\": \"Missing or expired token\"\n}"
             },
             {
               "name": "403 Forbidden",
@@ -848,7 +758,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"forbidden\",\n  \"message\": \"Insufficient permissions\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"forbidden\",\n  \"status\": 403,\n  \"detail\": \"Insufficient permissions\"\n}"
             },
             {
               "name": "404 Not Found",
@@ -860,7 +770,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"not_found\",\n  \"status\": 404,\n  \"detail\": \"Resource not found\"\n}"
             },
             {
               "name": "422 Unprocessable Entity",
@@ -872,7 +782,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"validation_error\",\n  \"message\": \"One or more fields failed validation\",\n  \"details\": [\n    { \"field\": \"tenant_id\", \"message\": \"Required\" },\n    { \"field\": \"company_code\", \"message\": \"Required\" }\n  ]\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"validation_error\",\n  \"status\": 422,\n  \"detail\": \"One or more fields failed validation\",\n  \"errors\": {\n    \"tenant_id\": [\n      \"Required\"\n    ],\n    \"company_code\": [\n      \"Required\"\n    ]\n  }\n}"
             },
             {
               "name": "429 Too Many Requests",
@@ -888,7 +798,7 @@
                   "value": "60"
                 }
               ],
-              "body": "{\n  \"error\": \"rate_limited\",\n  \"message\": \"Too many requests. Please retry after the period specified in the Retry-After header.\",\n  \"retry_after\": 60\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"rate_limited\",\n  \"status\": 429,\n  \"detail\": \"Too many requests. Please retry after the period specified in the Retry-After header.\"\n}"
             },
             {
               "name": "500 Internal Server Error",
@@ -900,7 +810,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"internal_error\",\n  \"message\": \"An unexpected error occurred\"\n}"
+              "body": "{\n  \"type\": \"about:blank\",\n  \"title\": \"internal_error\",\n  \"status\": 500,\n  \"detail\": \"An unexpected error occurred\"\n}"
             }
           ]
         }
@@ -910,7 +820,7 @@
       "name": "User Management",
       "item": [
         {
-          "name": "Set Default Password",
+          "name": "Reset Default Password",
           "request": {
             "method": "POST",
             "header": [
@@ -921,21 +831,14 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/user/default-password",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "user",
-                "default-password"
-              ]
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "user", "default-password"]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"target_user_id\": \"{{target_user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\"\n}"
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"target_user_id\": \"USR042\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\"\n}"
             },
-            "description": "Admin-only. Sets the target user's password to the default (changeMe@ddMMM, e.g. changeMe@11Apr) hashed via Argon2id. Also sets must_change_password = true, clears failed_login_count and locked_until. target_user_id is the user whose password is being reset \u2014 distinct from user_id (the calling admin). Target user must have an active profile."
+            "description": "Admin-only endpoint to reset a user's password to the platform default, forcing a change on next login."
           },
           "response": [
             {
@@ -951,7 +854,7 @@
               "body": "{\n  \"message\": \"Default password set. User must change password on next login.\"\n}"
             },
             {
-              "name": "404 Not Found \u2014 target user profile not found",
+              "name": "404 Not Found",
               "status": "Not Found",
               "code": 404,
               "header": [
@@ -972,7 +875,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"title\": \"Validation failed\",\n  \"errors\": { \"target_user_id\": [\"target_user_id is required.\"] },\n  \"status\": 422\n}"
+              "body": "{\n  \"title\": \"Validation failed\",\n  \"errors\": { \"target_user_id\": [\"target_user_id is required.\"] }\n}"
             },
             {
               "name": "403 Forbidden",
@@ -985,6 +888,188 @@
                 }
               ],
               "body": "{\n  \"title\": \"Forbidden\",\n  \"detail\": \"tenant_id does not match the authenticated tenant.\",\n  \"status\": 403\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Group Tour Lookups (moved from OpsGroups)",
+      "description": "User-list and Tour Generic catalogue lookups previously hosted on Nova.OpsGroups.Api. Moved here on 2026-04-19 — frontend callers reference the same endpoint registry key, only the SERVICE_MAP entry + path changed. Backend handoff: docs/backend-handoff-opsadmin-views-and-summary.md.",
+      "item": [
+        {
+          "name": "Fetch Users by Role (was: grouptour-task-team-members)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/by-role",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "by-role"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\",\n  \"roles\": [\"ops_manager\", \"ops_exec\"],\n  \"branch_code_filter\": null\n}"
+            },
+            "description": "Fetch users by role (e.g. ops_manager, ops_exec). Replaces /api/v1/grouptour-task-team-members on Nova.OpsGroups.Api. Roles are resolved against the tenant's role catalogue. Optional branch_code_filter narrows to specific branches."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"members\": [\n    {\n      \"user_id\": \"user-1\",\n      \"name\": \"Sarah Mitchell\",\n      \"initials\": \"SM\",\n      \"email\": \"sarah@example.com\",\n      \"phone\": \"+44 20 7946 0011\",\n      \"avatar_url\": \"https://cdn.novadhruv.com/avatars/user-1.jpg\",\n      \"roles\": [\"ops_manager\"],\n      \"is_active\": true\n    },\n    {\n      \"user_id\": \"user-4\",\n      \"name\": \"Jo Chen\",\n      \"initials\": \"JC\",\n      \"email\": \"jo@example.com\",\n      \"phone\": null,\n      \"avatar_url\": null,\n      \"roles\": [\"ops_manager\", \"ops_exec\"],\n      \"is_active\": true\n    }\n  ]\n}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Fetch Tour Generics catalogue (was: grouptour-task-tour-generics)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/groups/tour-generics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "groups", "tour-generics"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\"\n}"
+            },
+            "description": "Fetch the full Tour Generic catalogue for the tenant. Replaces /api/v1/grouptour-task-tour-generics on Nova.OpsGroups.Api. Used by SLA hierarchy editor + filter dropdowns. Switch to /groups/tour-generics/search if catalogue exceeds ~2000 entries."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"tour_generics\": [\n    { \"code\": \"BHU\", \"name\": \"Bhutan\" },\n    { \"code\": \"NORFJORD\", \"name\": \"Norwegian Fjords\" },\n    { \"code\": \"NEPAL\", \"name\": \"Nepal\" }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Search Tour Generics — typeahead (was: group-task-tour-generics-search)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/groups/tour-generics/search",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "groups", "tour-generics", "search"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\",\n  \"query\": \"BHU\",\n  \"field\": \"code\",\n  \"limit\": 8\n}"
+            },
+            "description": "Typeahead search over the Tour Generic catalogue. Replaces /api/v1/group-task-tour-generics-search on Nova.OpsGroups.Api. field=name|code, query is a fuzzy match. Returns up to `limit` results."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"results\": [\n    { \"code\": \"BHU\", \"name\": \"Bhutan\" },\n    { \"code\": \"BHX\", \"name\": \"Bhutan Express\" }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "description": "Task List catalogue (relocated from Nova.OpsGroups.Api). Backed by a single Presets table; columns: code (PK, e.g. VISA), name, required_ind, critical_ind, frz_ind, plus audit columns. Path param is {code} — the human-readable stable key, also used in SLA rules and the reorder body.",
+      "item": [
+        {
+          "name": "Fetch Tasks",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tasks"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\",\n  \"include_frozen\": false\n}"
+            },
+            "description": "Fetch the Task List catalogue. Optional `include_frozen` (boolean, default false) returns frozen rows as well. Rows are sorted by `sort_order` ascending; rows with NULL sort_order sort last."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"tasks\": [\n    {\n      \"code\": \"VISA\",\n      \"name\": \"Visa Check\",\n      \"required_ind\": true,\n      \"critical_ind\": true,\n      \"frz_ind\": false,\n      \"sort_order\": 1,\n      \"updated_at\": \"2026-03-18T14:40:00.000Z\",\n      \"updated_by\": \"U001\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Save Task",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{code}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tasks", "{{code}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\",\n  \"name\": \"Visa Check\",\n  \"required_ind\": true,\n  \"critical_ind\": true,\n  \"frz_ind\": false\n}"
+            },
+            "description": "Update a task definition. Path param `{code}` is the stable human-readable key (e.g. VISA). Does NOT mutate `sort_order` — use the reorder endpoint for that."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"code\": \"VISA\",\n  \"name\": \"Visa Check\",\n  \"required_ind\": true,\n  \"critical_ind\": true,\n  \"frz_ind\": false,\n  \"updated_at\": \"2026-04-19T10:00:00.000Z\",\n  \"updated_by\": \"U001\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Reorder Tasks",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/reorder",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tasks", "reorder"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\",\n  \"order\": [\n    { \"code\": \"VISA\", \"sort_order\": 1 },\n    { \"code\": \"FLIGHT\", \"sort_order\": 2 },\n    { \"code\": \"HOTEL\", \"sort_order\": 3 }\n  ]\n}"
+            },
+            "description": "Persist a new manual display order for the Task List. Apply atomically (single transaction). `sort_order` is 1-based. Codes not in the payload are left untouched. Returns 409 with `unknown_codes` if any code does not exist."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true\n}"
+            },
+            {
+              "name": "409 Conflict",
+              "status": "Conflict",
+              "code": 409,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"type\": \"https://api.novadhruv.com/errors/unknown-task-code\",\n  \"title\": \"Unknown task code\",\n  \"status\": 409,\n  \"detail\": \"One or more codes in the order payload do not exist.\",\n  \"unknown_codes\": [\"XYZ\"]\n}"
             }
           ]
         }

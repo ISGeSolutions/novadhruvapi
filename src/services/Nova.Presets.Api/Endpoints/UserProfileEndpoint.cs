@@ -61,7 +61,8 @@ public static class UserProfileEndpoint
         {
             profile = await authConn.QuerySingleOrDefaultAsync<ProfileRow>(
                 $"""
-                SELECT display_name AS DisplayName, email AS Email, avatar_url AS AvatarUrl
+                SELECT display_name AS DisplayName, email AS Email, avatar_url AS AvatarUrl,
+                       program_id_root AS ProgramIdRoot
                 FROM   {profileTable}
                 WHERE  tenant_id = @TenantId
                 AND    user_id   = @UserId
@@ -77,8 +78,9 @@ public static class UserProfileEndpoint
                 detail:     "User profile not found.",
                 statusCode: StatusCodes.Status404NotFound);
 
-        // Query 2 — PresetsDb: status (optional — COALESCE to defaults if missing)
-        StatusRow? status;
+        // Query 2 — PresetsDb: status + permissions (both from same connection)
+        StatusRow?   status;
+        List<string> permissions;
         using (IDbConnection presetsConn = connectionFactory.CreateFromConnectionString(
                    presetsDb.ConnectionString, presetsDb.DbType))
         {
@@ -91,21 +93,29 @@ public static class UserProfileEndpoint
                 """,
                 new { request.TenantId, request.UserId },
                 commandTimeout: 10);
+
+            string permSql = PresetsDbHelper.UserPermissionsQuerySql(presetsDb);
+            permissions = (await presetsConn.QueryAsync<string>(
+                permSql,
+                new { request.TenantId, request.UserId },
+                commandTimeout: 10)).ToList();
         }
 
         return TypedResults.Ok(new
         {
-            user_id      = request.UserId,
-            name         = profile.DisplayName,
-            email        = profile.Email,
-            avatar_url   = profile.AvatarUrl,
-            status_id    = status?.StatusId    ?? "available",
-            status_label = status?.StatusLabel ?? "Available",
-            status_note  = status?.StatusNote,
+            user_id         = request.UserId,
+            name            = profile.DisplayName,
+            email           = profile.Email,
+            avatar_url      = profile.AvatarUrl,
+            program_id_root = profile.ProgramIdRoot,
+            status_id       = status?.StatusId    ?? "available",
+            status_label    = status?.StatusLabel ?? "Available",
+            status_note     = status?.StatusNote,
+            permissions,
         });
     }
 
-    private sealed record ProfileRow(string DisplayName, string Email, string? AvatarUrl);
+    private sealed record ProfileRow(string DisplayName, string Email, string? AvatarUrl, string? ProgramIdRoot);
     private sealed record StatusRow(string StatusId, string StatusLabel, string? StatusNote);
     private sealed record ProfileRequest : RequestContext;
 }

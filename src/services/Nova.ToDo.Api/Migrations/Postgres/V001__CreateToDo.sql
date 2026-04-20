@@ -1,6 +1,6 @@
 -- V001: Create ToDo table (Postgres)
 -- Nova.ToDo.Api — task management.
--- Uses UUID v7 primary key (app-generated).
+-- Uses UUID v7 primary key (app-generated before INSERT).
 -- Schema: sales97 — mirrors the MSSQL database name per Nova naming convention:
 --   MSSQL  sales97.dbo.ToDo  →  Postgres  sales97.todo  (database-name becomes schema-name, dbo dropped)
 -- Safe to run automatically — CREATE TABLE IF NOT EXISTS, no destructive operations.
@@ -14,14 +14,14 @@ CREATE TABLE IF NOT EXISTS sales97.todo (
     assigned_to_user_code varchar(10)   NOT NULL,
     priority_code         varchar(2)    NOT NULL,
     due_date              date          NOT NULL,
-    due_time              time          NULL,
+    due_time              varchar(5)    NULL,
     inflexible_ind        boolean       NOT NULL DEFAULT false,
     start_date            date          NULL,
-    start_time            time          NULL,
+    start_time            varchar(5)    NULL,
     assigned_by_user_code varchar(10)   NOT NULL,
     assigned_on           timestamptz   NULL,
     remark                text          NULL,
-    est_job_time          interval      NULL,
+    est_job_time          varchar(5)    NULL,
 
     client_name           varchar(60)   NULL,
     bkg_no                integer       NULL,

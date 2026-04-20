@@ -59,7 +59,9 @@ public static class ForgotPasswordEndpoint
             return Ok();
 
         // Generate token, hash, store, send email
-        string plainToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
+        // URL-safe base64 (no +/= chars) so the token can be used directly in URLs without URI-escaping
+        string plainToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48))
+                                .Replace('+', '-').Replace('/', '_').TrimEnd('=');
         string tokenHash  = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(plainToken)));
         var    now        = AuthDbHelper.UtcNow();
         var    expiresOn  = now.AddMinutes(authMonitor.CurrentValue.PasswordResetTokenExpiryMinutes);
@@ -71,7 +73,7 @@ public static class ForgotPasswordEndpoint
             """,
             new
             {
-                Id        = Guid.NewGuid(),
+                Id        = Guid.CreateVersion7(),
                 request.TenantId,
                 request.UserId,
                 TokenHash = tokenHash,
@@ -83,7 +85,7 @@ public static class ForgotPasswordEndpoint
         await emailSender.SendAsync(
             to:            email,
             subject:       "Nova — Password Reset",
-            plainTextBody: $"Click the link to reset your password: https://app.nova.internal/reset-password?token={Uri.EscapeDataString(plainToken)}",
+            plainTextBody: $"Click the link to reset your password: https://app.nova.internal/reset-password?token={plainToken}",
             ct:            ct);
 
         return Ok();

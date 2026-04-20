@@ -3,18 +3,23 @@ namespace Nova.ToDo.Api.Models;
 // ---------------------------------------------------------------------------
 // Dapper DTO — mirrors the DB column layout of sales97.dbo.ToDo.
 //
-// Dapper maps column names to property names case-insensitively and strips
-// underscores, so legacy columns map cleanly:
+// MSSQL-LEGACY aliases applied in every SELECT query (see each endpoint):
+//   FORMAT(DueTime, 'HH:mm')    AS due_time         → DueTime   (string?)
+//   FORMAT(StartTime, 'HH:mm')  AS start_time       → StartTime (string?)
+//   FORMAT(EstJobTime, 'HH:mm') AS est_job_time      → EstJobTime (string?)
+//   Brochure_Code_Short         AS tour_series_code  → TourSeriesCode (string?)
+//   ISNULL(FrzInd, 0)           AS frz_ind           → FrzInd (bool)
 //
+// Other legacy columns auto-map via MatchNamesWithUnderscores = true:
 //   Accountcode_Client  → AccountcodeClient
-//   Brochure_Code_Short → BrochureCodeShort
 //   Travel_PNRNo        → TravelPNRNo
 //   SeqNo_Charges       → SeqNoCharges
 //   SeqNo_AcctNotes     → SeqNoAcctNotes
 //   Itinerary_No        → ItineraryNo
 //
-// All datetime columns from MSSQL arrive as DateTime (Kind = Unspecified).
-// They are projected to DateOnly / string "HH:mm" / DateTimeOffset in ToDoDetail.
+// Date-only datetime columns (DueDate, StartDate, DepDate, AssignedOn, DoneOn,
+// CreatedOn, UpdatedOn) arrive as DateTime (Kind = Unspecified) and are
+// projected to DateOnly / DateTimeOffset in ToDoDetail.
 // ---------------------------------------------------------------------------
 
 internal sealed record ToDoRow(
@@ -24,20 +29,20 @@ internal sealed record ToDoRow(
     string    AssignedToUserCode,
     string    PriorityCode,
     DateTime  DueDate,               // mandatory, date only (time component discarded)
-    DateTime? DueTime,               // optional, time only  (date component discarded)
+    string?   DueTime,               // "HH:mm" — FORMAT(DueTime,'HH:mm') AS due_time
     bool      InFlexibleInd,
     DateTime? StartDate,             // optional, date only
-    DateTime? StartTime,             // optional, time only
+    string?   StartTime,             // "HH:mm" — FORMAT(StartTime,'HH:mm') AS start_time
     string    AssignedByUserCode,
     DateTime? AssignedOn,            // UTC timestamp
     string?   Remark,
-    DateTime? EstJobTime,            // duration stored as datetime — projected to "HH:mm"
+    string?   EstJobTime,            // "HH:mm" — FORMAT(EstJobTime,'HH:mm') AS est_job_time
     string?   ClientName,
     int?      BkgNo,
     int?      QuoteNo,
     string?   CampaignCode,
     string?   AccountcodeClient,     // DB: Accountcode_Client → wire: account_code_client
-    string?   BrochureCodeShort,     // DB: Brochure_Code_Short → wire: tour_series_code
+    string?   TourSeriesCode,        // DB: Brochure_Code_Short AS tour_series_code → wire: tour_series_code
     DateTime? DepDate,               // optional, date only
     string?   SupplierCode,
     bool      SendEMailToInd,

@@ -1,8 +1,28 @@
 {
   "id": "dev-env-todo",
-  "name": "Nova.ToDo.Api – Dev",
+  "name": "Nova.ToDo.Api \u2013 Dev",
   "_postman_variable_scope": "environment",
   "values": [
-    { "key": "base_url", "value": "http://localhost:5101", "type": "default", "enabled": true }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5101",
+      "type": "default",
+      "enabled": true,
+      "description": "Nova.ToDo.Api listen address."
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "secret",
+      "enabled": true,
+      "description": "Set automatically by the collection pre-request script. Do not edit by hand."
+    },
+    {
+      "key": "seq_no",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "SeqNo of a specific ToDo item. Used in single-item GET/update/delete requests."
+    }
   ]
 }

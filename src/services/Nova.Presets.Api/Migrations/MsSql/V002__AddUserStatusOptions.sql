@@ -20,9 +20,9 @@ BEGIN
         serial_no    int           NOT NULL DEFAULT 0,
         frz_ind      bit           NOT NULL DEFAULT 0,
         created_by   varchar(10)   NOT NULL,
-        created_on   datetime2     NOT NULL,
+        created_on   datetimeoffset     NOT NULL,
         updated_by   varchar(10)   NOT NULL,
-        updated_on   datetime2     NOT NULL,
+        updated_on   datetimeoffset     NOT NULL,
         updated_at   varchar(50)   NOT NULL,
         CONSTRAINT pk_user_status_options PRIMARY KEY (id)
     );

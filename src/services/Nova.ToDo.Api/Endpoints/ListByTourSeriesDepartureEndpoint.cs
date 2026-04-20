@@ -61,8 +61,8 @@ public static class ListByTourSeriesDepartureEndpoint
         string acctMast = dialect.TableRef("sales97", "accountmast");
 
         var conditions = new List<string> { "t.Brochure_Code_Short = @TourSeriesCode" };
-        if (!request.IncludeFrozen)   conditions.Add($"t.frz_ind = {dialect.BooleanLiteral(false)}");
-        if (request.DoneInd.HasValue) conditions.Add($"t.done_ind = {dialect.BooleanLiteral(request.DoneInd.Value)}");
+        if (!request.IncludeFrozen)   conditions.Add($"t.FrzInd = {dialect.BooleanLiteral(false)}");
+        if (request.DoneInd.HasValue) conditions.Add($"t.DoneInd = {dialect.BooleanLiteral(request.DoneInd.Value)}");
         if (from.HasValue)            conditions.Add("CONVERT(date, t.DepDate) >= @DepDateFrom");  // TODO (item 5)
         if (to.HasValue)              conditions.Add("CONVERT(date, t.DepDate) <= @DepDateTo");
 
@@ -72,12 +72,13 @@ public static class ListByTourSeriesDepartureEndpoint
         string offsetFetch = dialect.OffsetFetchClause(skip, fetch);
 
         // TODO (item 7): cross-database JOINs are MSSQL-only — adapt for Postgres/MariaDB.
+        // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
         string sql = $"""
             SELECT
                 t.SeqNo, t.PriorityCode, t.StartDate, t.DueDate, t.AssignedToUserCode,
                 t.TaskDetail, t.Remark, t.CreatedBy, t.CreatedOn, t.UpdatedBy, t.UpdatedOn,
                 t.SendSMSInd, t.SendSMSTo, t.SentMailInd, t.DoneInd,
-                t.Accountcode_Client, t.BkgNo, t.QuoteNo, t.FrzInd,
+                t.Accountcode_Client, t.BkgNo, t.QuoteNo, ISNULL(t.FrzInd, 0) AS frz_ind,
                 p.description           AS PriorityName,
                 u.fullname              AS AssignedToUserName,
                 uc.fullname             AS CreatedByName,

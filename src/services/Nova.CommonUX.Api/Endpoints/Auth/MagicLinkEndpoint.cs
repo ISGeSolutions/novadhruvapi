@@ -59,7 +59,9 @@ public static class MagicLinkEndpoint
         if (row is null)
             return Ok();
 
-        string plainToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
+        // URL-safe base64 (no +/= chars) so the token can be used directly in URLs without URI-escaping
+        string plainToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48))
+                                .Replace('+', '-').Replace('/', '_').TrimEnd('=');
         string tokenHash  = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(plainToken)));
         var    now        = AuthDbHelper.UtcNow();
         var    expiresOn  = now.AddMinutes(authMonitor.CurrentValue.MagicLinkTokenExpiryMinutes);
@@ -71,7 +73,7 @@ public static class MagicLinkEndpoint
             """,
             new
             {
-                Id        = Guid.NewGuid(),
+                Id        = Guid.CreateVersion7(),
                 request.TenantId,
                 UserId    = row.UserId,
                 TokenHash = tokenHash,
@@ -83,7 +85,7 @@ public static class MagicLinkEndpoint
         await emailSender.SendAsync(
             to:            row.Email,
             subject:       "Nova — Your magic link",
-            plainTextBody: $"Click this link to sign in (expires in {authMonitor.CurrentValue.MagicLinkTokenExpiryMinutes} minutes): https://app.nova.internal/magic?token={Uri.EscapeDataString(plainToken)}",
+            plainTextBody: $"Click this link to sign in (expires in {authMonitor.CurrentValue.MagicLinkTokenExpiryMinutes} minutes): https://app.nova.internal/magic?token={plainToken}",
             ct:            ct);
 
         return Ok();

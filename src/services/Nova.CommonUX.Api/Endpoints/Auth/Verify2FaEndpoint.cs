@@ -95,7 +95,7 @@ public static class Verify2FaEndpoint
         // Load profile and issue JWT
         ProfileRow? prof = await connection.QuerySingleOrDefaultAsync<ProfileRow>(
             $"""
-            SELECT display_name, email, avatar_url
+            SELECT display_name, email, avatar_url, program_id_root
             FROM {profile}
             WHERE tenant_id = @TenantId AND user_id = @UserId AND frz_ind = {dialect.BooleanLiteral(false)}
             """,
@@ -118,7 +118,7 @@ public static class Verify2FaEndpoint
             Requires2Fa:  false,
             SessionToken: null,
             RefreshToken: refreshToken,
-            User: prof is null ? null : new UserInfo(userId, prof.DisplayName, prof.Email, prof.AvatarUrl)));
+            User: prof is null ? null : new UserInfo(userId, prof.DisplayName, prof.Email, prof.AvatarUrl, prof.ProgramIdRoot)));
     }
 
     private static IResult Unauthorized() =>
@@ -127,7 +127,7 @@ public static class Verify2FaEndpoint
             detail:     "Invalid or expired session token or incorrect code.",
             statusCode: StatusCodes.Status401Unauthorized);
 
-    private sealed record ProfileRow(string DisplayName, string Email, string? AvatarUrl);
+    private sealed record ProfileRow(string DisplayName, string Email, string? AvatarUrl, string? ProgramIdRoot);
 
     private sealed record Verify2FaRequest
     {

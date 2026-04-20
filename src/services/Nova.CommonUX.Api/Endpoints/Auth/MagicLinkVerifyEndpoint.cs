@@ -71,7 +71,7 @@ public static class MagicLinkVerifyEndpoint
 
         ProfileRow? prof = await connection.QuerySingleOrDefaultAsync<ProfileRow>(
             $"""
-            SELECT display_name, email, avatar_url
+            SELECT display_name, email, avatar_url, program_id_root
             FROM {profile}
             WHERE tenant_id = @TenantId AND user_id = @UserId AND frz_ind = {dialect.BooleanLiteral(false)}
             """,
@@ -94,14 +94,21 @@ public static class MagicLinkVerifyEndpoint
             Requires2Fa:  false,
             SessionToken: null,
             RefreshToken: refreshToken,
-            User: prof is null ? null : new UserInfo(row.UserId, prof.DisplayName, prof.Email, prof.AvatarUrl)));
+            User: prof is null ? null : new UserInfo(row.UserId, prof.DisplayName, prof.Email, prof.AvatarUrl, prof.ProgramIdRoot)));
     }
 
-    private sealed record TokenRow(Guid Id, string TenantId, string UserId, DateTimeOffset ExpiresOn, DateTimeOffset? UsedOn);
-    private sealed record ProfileRow(string DisplayName, string Email, string? AvatarUrl);
+    private sealed record TokenRow
+    {
+        public Guid            Id        { get; set; }
+        public string          TenantId  { get; set; } = string.Empty;
+        public string          UserId    { get; set; } = string.Empty;
+        public DateTimeOffset  ExpiresOn { get; set; }
+        public DateTimeOffset? UsedOn    { get; set; }
+    }
+    private sealed record ProfileRow(string DisplayName, string Email, string? AvatarUrl, string? ProgramIdRoot);
 
     private sealed record MagicLinkVerifyRequest
     {
-        public string? Token { get; init; }
+        public string? Token { get; set; }
     }
 }

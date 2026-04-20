@@ -13,8 +13,8 @@ BEGIN
         aggregate_id    NVARCHAR(100)     NOT NULL,
         event_type      NVARCHAR(200)     NOT NULL,
         payload         NVARCHAR(MAX)     NOT NULL,
-        created_at      DATETIME2         NOT NULL  DEFAULT SYSUTCDATETIME(),
-        processed_at    DATETIME2         NULL,
+        created_at      datetimeoffset    NOT NULL  DEFAULT SYSUTCDATETIME(),
+        processed_at    datetimeoffset    NULL,
         retry_count     INT               NOT NULL  DEFAULT 0,
         last_error      NVARCHAR(MAX)     NULL,
         CONSTRAINT pk_nova_outbox PRIMARY KEY (id)

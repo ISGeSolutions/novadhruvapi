@@ -130,30 +130,6 @@ CREATE TABLE IF NOT EXISTS `nova_auth`.`tenant_config`
     PRIMARY KEY (`tenant_id`, `company_code`, `branch_code`)
 ) ENGINE=InnoDB;
 
--- ------------------------------------------------------------
--- tenant_menu_items
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `nova_auth`.`tenant_menu_items`
-(
-    `menu_item_id`            VARCHAR(10)     NOT NULL,
-    `tenant_id`               VARCHAR(10)     NOT NULL,
-    `parent_id`               VARCHAR(10)     NULL,
-    `label`                   VARCHAR(200)    NOT NULL,
-    `icon`                    VARCHAR(100)    NULL,
-    `route`                   VARCHAR(500)    NULL,
-    `external_url_template`   VARCHAR(500)    NULL,
-    `external_url_param_mode` VARCHAR(20)     NOT NULL DEFAULT 'none',
-    `required_roles`          VARCHAR(500)    NULL,
-    `sort_order`              INT             NOT NULL DEFAULT 0,
-    `is_active`               TINYINT(1)      NOT NULL DEFAULT 1,
-    `frz_ind`                 TINYINT(1)      NOT NULL DEFAULT 0,
-    `created_by`              VARCHAR(10)     NOT NULL,
-    `created_on`              DATETIME        NOT NULL,
-    `updated_by`              VARCHAR(10)     NOT NULL,
-    `updated_on`              DATETIME        NOT NULL,
-    `updated_at`              VARCHAR(50)    NOT NULL,
-    PRIMARY KEY (`menu_item_id`, `tenant_id`)
-) ENGINE=InnoDB;
 
 -- ------------------------------------------------------------
 -- Indexes
@@ -174,5 +150,3 @@ CREATE INDEX `ix_tenant_user_social_pending`
 CREATE INDEX `ix_tenant_auth_tokens_hash`
     ON `nova_auth`.`tenant_auth_tokens` (`token_hash`, `token_type`);
 
-CREATE INDEX `ix_tenant_menu_items_tenant`
-    ON `nova_auth`.`tenant_menu_items` (`tenant_id`, `sort_order`);
