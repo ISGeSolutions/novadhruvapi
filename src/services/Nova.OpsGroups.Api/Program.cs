@@ -160,6 +160,9 @@ DashboardEndpoints.Map(v1);
 // Business rules
 BusinessRulesEndpoint.Map(v1);
 
+// Page configuration (feature flags, no DB call)
+PageConfigEndpoint.Map(v1);
+
 // 410 Gone stubs for removed/relocated endpoints
 RemovedEndpointsEndpoint.Map(v1);
 

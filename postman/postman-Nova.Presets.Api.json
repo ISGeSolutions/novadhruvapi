@@ -831,8 +831,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/user/default-password",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "user", "default-password"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user",
+                "default-password"
+              ]
             },
             "body": {
               "mode": "raw",
@@ -895,17 +902,29 @@
     },
     {
       "name": "Group Tour Lookups (moved from OpsGroups)",
-      "description": "User-list and Tour Generic catalogue lookups previously hosted on Nova.OpsGroups.Api. Moved here on 2026-04-19 — frontend callers reference the same endpoint registry key, only the SERVICE_MAP entry + path changed. Backend handoff: docs/backend-handoff-opsadmin-views-and-summary.md.",
+      "description": "User-list and Tour Generic catalogue lookups previously hosted on Nova.OpsGroups.Api. Moved here on 2026-04-19 \u2014 frontend callers reference the same endpoint registry key, only the SERVICE_MAP entry + path changed. Backend handoff: docs/backend-handoff-opsadmin-views-and-summary.md.",
       "item": [
         {
           "name": "Fetch Users by Role (was: grouptour-task-team-members)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/users/by-role",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "users", "by-role"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "by-role"
+              ]
             },
             "body": {
               "mode": "raw",
@@ -918,14 +937,24 @@
               "name": "Success",
               "status": "OK",
               "code": 200,
-              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"members\": [\n    {\n      \"user_id\": \"user-1\",\n      \"name\": \"Sarah Mitchell\",\n      \"initials\": \"SM\",\n      \"email\": \"sarah@example.com\",\n      \"phone\": \"+44 20 7946 0011\",\n      \"avatar_url\": \"https://cdn.novadhruv.com/avatars/user-1.jpg\",\n      \"roles\": [\"ops_manager\"],\n      \"is_active\": true\n    },\n    {\n      \"user_id\": \"user-4\",\n      \"name\": \"Jo Chen\",\n      \"initials\": \"JC\",\n      \"email\": \"jo@example.com\",\n      \"phone\": null,\n      \"avatar_url\": null,\n      \"roles\": [\"ops_manager\", \"ops_exec\"],\n      \"is_active\": true\n    }\n  ]\n}"
             },
             {
               "name": "401 Unauthorized",
               "status": "Unauthorized",
               "code": 401,
-              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"Missing or expired token\"\n}"
             }
           ]
@@ -934,11 +963,23 @@
           "name": "Fetch Tour Generics catalogue (was: grouptour-task-tour-generics)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/groups/tour-generics",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "groups", "tour-generics"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "groups",
+                "tour-generics"
+              ]
             },
             "body": {
               "mode": "raw",
@@ -951,20 +992,38 @@
               "name": "Success",
               "status": "OK",
               "code": 200,
-              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"tour_generics\": [\n    { \"code\": \"BHU\", \"name\": \"Bhutan\" },\n    { \"code\": \"NORFJORD\", \"name\": \"Norwegian Fjords\" },\n    { \"code\": \"NEPAL\", \"name\": \"Nepal\" }\n  ]\n}"
             }
           ]
         },
         {
-          "name": "Search Tour Generics — typeahead (was: group-task-tour-generics-search)",
+          "name": "Search Tour Generics \u2014 typeahead (was: group-task-tour-generics-search)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/groups/tour-generics/search",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "groups", "tour-generics", "search"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "groups",
+                "tour-generics",
+                "search"
+              ]
             },
             "body": {
               "mode": "raw",
@@ -977,7 +1036,12 @@
               "name": "Success",
               "status": "OK",
               "code": 200,
-              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"results\": [\n    { \"code\": \"BHU\", \"name\": \"Bhutan\" },\n    { \"code\": \"BHX\", \"name\": \"Bhutan Express\" }\n  ]\n}"
             }
           ]
@@ -986,17 +1050,28 @@
     },
     {
       "name": "Tasks",
-      "description": "Task List catalogue (relocated from Nova.OpsGroups.Api). Backed by a single Presets table; columns: code (PK, e.g. VISA), name, required_ind, critical_ind, frz_ind, plus audit columns. Path param is {code} — the human-readable stable key, also used in SLA rules and the reorder body.",
+      "description": "Task List catalogue (relocated from Nova.OpsGroups.Api). Backed by a single Presets table; columns: code (PK, e.g. VISA), name, required_ind, critical_ind, frz_ind, plus audit columns. Path param is {code} \u2014 the human-readable stable key, also used in SLA rules and the reorder body.",
       "item": [
         {
           "name": "Fetch Tasks",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/tasks",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "tasks"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ]
             },
             "body": {
               "mode": "raw",
@@ -1009,7 +1084,12 @@
               "name": "Success",
               "status": "OK",
               "code": 200,
-              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"tasks\": [\n    {\n      \"code\": \"VISA\",\n      \"name\": \"Visa Check\",\n      \"required_ind\": true,\n      \"critical_ind\": true,\n      \"frz_ind\": false,\n      \"sort_order\": 1,\n      \"updated_at\": \"2026-03-18T14:40:00.000Z\",\n      \"updated_by\": \"U001\"\n    }\n  ]\n}"
             }
           ]
@@ -1018,24 +1098,41 @@
           "name": "Save Task",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/tasks/{{code}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "tasks", "{{code}}"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{code}}"
+              ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\",\n  \"name\": \"Visa Check\",\n  \"required_ind\": true,\n  \"critical_ind\": true,\n  \"frz_ind\": false\n}"
             },
-            "description": "Update a task definition. Path param `{code}` is the stable human-readable key (e.g. VISA). Does NOT mutate `sort_order` — use the reorder endpoint for that."
+            "description": "Update a task definition. Path param `{code}` is the stable human-readable key (e.g. VISA). Does NOT mutate `sort_order` \u2014 use the reorder endpoint for that."
           },
           "response": [
             {
               "name": "Success",
               "status": "OK",
               "code": 200,
-              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"code\": \"VISA\",\n  \"name\": \"Visa Check\",\n  \"required_ind\": true,\n  \"critical_ind\": true,\n  \"frz_ind\": false,\n  \"updated_at\": \"2026-04-19T10:00:00.000Z\",\n  \"updated_by\": \"U001\"\n}"
             }
           ]
@@ -1044,11 +1141,23 @@
           "name": "Reorder Tasks",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/tasks/reorder",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "tasks", "reorder"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "reorder"
+              ]
             },
             "body": {
               "mode": "raw",
@@ -1061,19 +1170,66 @@
               "name": "200 OK",
               "status": "OK",
               "code": 200,
-              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"success\": true\n}"
             },
             {
               "name": "409 Conflict",
               "status": "Conflict",
               "code": 409,
-              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"type\": \"https://api.novadhruv.com/errors/unknown-task-code\",\n  \"title\": \"Unknown task code\",\n  \"status\": 409,\n  \"detail\": \"One or more codes in the order payload do not exist.\",\n  \"unknown_codes\": [\"XYZ\"]\n}"
             }
           ]
         }
       ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const url = pm.request.url.toString();",
+          "if (url.includes('/health') || url.includes('/confirm-password-change')) return;",
+          "const existing = pm.variables.get('access_token');",
+          "if (existing) {",
+          "    try {",
+          "        const parts = existing.split('.');",
+          "        if (parts.length === 3) {",
+          "            const padded  = parts[1].replace(/-/g, '+').replace(/_/g, '/');",
+          "            const decoded = JSON.parse(CryptoJS.enc.Utf8.stringify(CryptoJS.enc.Base64.parse(padded)));",
+          "            const now = Math.floor(Date.now() / 1000);",
+          "            if (decoded.exp && decoded.exp > now + 60) { return; }",
+          "        }",
+          "    } catch (_) {}",
+          "}",
+          "const required = ['jwt_secret', 'tenant_id', 'company_code', 'branch_code', 'user_id'];",
+          "for (const key of required) {",
+          "    if (!pm.variables.get(key)) throw new Error('[Nova.Presets] Missing variable: ' + key);",
+          "}",
+          "const base64url = (obj) => CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(JSON.stringify(obj))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
+          "const now = Math.floor(Date.now() / 1000);",
+          "const header  = base64url({ alg: 'HS256', typ: 'JWT' });",
+          "const payload = base64url({ iss: pm.variables.get('jwt_issuer') || 'https://auth.nova.internal', aud: pm.variables.get('jwt_audience') || 'nova-api', sub: pm.variables.get('user_id'), tenant_id: pm.variables.get('tenant_id'), company_code: pm.variables.get('company_code'), branch_code: pm.variables.get('branch_code'), user_id: pm.variables.get('user_id'), iat: now, exp: now + 3600 });",
+          "const sig = CryptoJS.enc.Base64.stringify(CryptoJS.HmacSHA256(header + '.' + payload, pm.variables.get('jwt_secret'))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');",
+          "const token = header + '.' + payload + '.' + sig;",
+          "pm.collectionVariables.set('access_token', token);",
+          "try { pm.environment.set('access_token', token); } catch (_) {}",
+          "console.log('[Nova.Presets] access_token refreshed.');"
+        ]
+      }
     }
   ]
 }

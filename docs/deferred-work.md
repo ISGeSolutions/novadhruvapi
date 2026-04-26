@@ -54,13 +54,13 @@ Already implemented during CommonUX manual testing:
 ---
 
 ### SummaryByContextEndpoint — incomplete scope branches
-**Status:** Not started  
-**File:** `src/services/Nova.ToDo.Api/Endpoints/SummaryByContextEndpoint.cs` lines 124–125, 183  
+**Status:** Partially done  
+**File:** `src/services/Nova.ToDo.Api/Endpoints/SummaryByContextEndpoint.cs`  
 **What:**
-- `account_code_client` scope: should join open enquiries/quotes/bookings within a 15-day return window
-- `supplier_code` scope: should filter `DoneOn` within last 30 days
-- Inline query scope for NULL context not yet implemented  
-**Why deferred:** Business rules for these scopes need product confirmation before coding.
+- `account_code_client` scope: `completed_count` should be restricted to tasks linked to open enquiries/quotes/bookings whose return date is within the last 15 days. Currently returns a SQL comment placeholder — all completed tasks for the client are counted instead. Requires a cross-table subquery (tables and "return date" column TBC).
+- ~~`supplier_code` scope~~ — **DONE**: `AND DoneOn >= @SupplierWindowStart` (last 30 days) is implemented.
+- ~~Inline query scope for NULL context~~ — **not a real gap**: the `return string.Empty` fallback in `BuildCompletedFilter` is unreachable — the endpoint validates exactly-one-context.  
+**Why deferred:** `account_code_client` rule blocked on product confirmation of which table defines "open" and which column defines the return date.
 
 ---
 
@@ -140,12 +140,8 @@ V002 migration (Postgres/MariaDB/MsSql). `GroupTaskUpdateSql`/`GroupTaskConditio
 
 ---
 
-### Pattern A batch — confirmed `200 OK` envelope (decision record)
-**Status:** Decision recorded 2026-04-26 — no code yet  
-**What:** Batch Pattern A endpoints return `200 OK` with `{ saved: [...], conflicts: [...] }` — NOT `207 Multi-Status`. Decision made during UX countersign of `backend-handoff-conflict-detection.md`. Apply to:
-- `PATCH /api/v1/group-task-bulk-update-group-tasks` when lock_ver is added above
-- All future OpsBookings.Api batch endpoints  
-**Why deferred:** Batch conflict UI is follow-on to single-row conflict UI.
+### ~~Pattern A batch — confirmed `200 OK` envelope — DONE 2026-04-26~~
+`HandleBulkUpdateAsync` in `GroupTaskEndpoint.cs` already returns `200 OK` with `{ saved: [...], conflicts: [...] }`. Apply same envelope to all future OpsBookings.Api batch endpoints when built.
 
 ---
 
