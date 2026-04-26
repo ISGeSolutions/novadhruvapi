@@ -93,14 +93,21 @@ public static class ConfirmPasswordChangeEndpoint
                 commandTimeout: 10);
         }
 
-        // Step 3: Mark request as confirmed in PresetsDb
+        // Step 3: Atomically mark request as confirmed — guards against two simultaneous requests
+        // with the same token both passing the SELECT check above.
         using (IDbConnection presetsConn = connectionFactory.CreateFromConnectionString(
                    presetsDb.ConnectionString, presetsDb.DbType))
         {
-            await presetsConn.ExecuteAsync(
-                $"UPDATE {changeReq} SET confirmed_on = @Now WHERE id = @Id",
+            int confirmed = await presetsConn.ExecuteAsync(
+                $"UPDATE {changeReq} SET confirmed_on = @Now WHERE id = @Id AND confirmed_on IS NULL",
                 new { Now = now, pending.Id },
                 commandTimeout: 10);
+
+            if (confirmed == 0)
+                return TypedResults.Problem(
+                    title:      "Bad request",
+                    detail:     "Invalid or expired confirmation token.",
+                    statusCode: StatusCodes.Status400BadRequest);
         }
 
         return TypedResults.Ok(new { message = "Your password has been updated successfully." });

@@ -12,7 +12,7 @@
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/v1/user-profile` | Fetch user profile (name, email, avatar, status) |
+| `POST /api/v1/user-profile` | Fetch user profile (name, email, avatar, status, permissions) |
 | `POST /api/v1/user-profile/avatar` | Upload profile avatar image |
 | `POST /api/v1/user-profile/status-options` | Fetch tenant/company/branch-scoped status options |
 | `PATCH /api/v1/user-profile/status` | Update user presence status |
@@ -20,8 +20,14 @@
 | `POST /api/v1/user-profile/confirm-password-change` | Confirm password change via email token |
 | `POST /api/v1/user/default-password` | Admin: reset user to default password |
 | `POST /api/v1/branches` | Fetch branches for the authenticated tenant |
+| `POST /api/v1/users/by-role` | Fetch ops team members filtered by role(s) and optional branch list |
+| `POST /api/v1/groups/tour-generics` | Fetch full tour generics catalogue (client-side Fuse.js search) |
+| `POST /api/v1/groups/tour-generics/search` | Server-side LIKE typeahead search across tour generics |
+| `POST /api/v1/tasks` | List group task templates for the tenant |
+| `PATCH /api/v1/tasks/{code}` | Partial update or soft-delete a task template |
+| `PATCH /api/v1/tasks/reorder` | Atomically reorder task templates (drag-drop sort order) |
 
-Reads from two databases: **AuthDb** (`nova_auth` schema — identity/credentials) and **PresetsDb** (`presets` schema — status, password change requests, status options).
+Reads from two databases: **AuthDb** (`nova_auth` schema — identity/credentials) and **PresetsDb** (`presets` schema — status, password change requests, status options, task templates, tour generics, permissions).
 
 ---
 
@@ -139,13 +145,22 @@ POST http://localhost:5103/run-presets-migrations
 Migrations live in:
 ```
 src/services/Nova.Presets.Api/Migrations/
-  MsSql/    V001__CreatePresets.sql
-            V002__AddUserStatusOptions.sql
-  Postgres/ V001__CreatePresets.sql
-            V002__AddUserStatusOptions.sql
-  MariaDb/  V001__CreatePresets.sql
-            V002__AddUserStatusOptions.sql
+  MsSql/    V001__CreatePresets.sql               — company, branch, tenant_user_status,
+            V002__AddUserStatusOptions.sql           tenant_password_change_requests
+            V003__AddPrograms.sql                  — user_status_options
+            V004__AddGroupTasksAndTourGenerics.sql — programs, program_tree
+            V005__RenameOpsTasksMenuEntry.sql       — group_tasks, tour_generics, tenant_user_permissions
+  Postgres/ (same V001–V005)                      — renames OPS_ACTIVITIES → OPS_TASKS program entry
+  MariaDb/  (same V001–V005)
 ```
+
+| Migration | Tables added / changed |
+|---|---|
+| V001 | `company`, `branch`, `tenant_user_status`, `tenant_password_change_requests` |
+| V002 | `user_status_options` |
+| V003 | `programs`, `program_tree` |
+| V004 | `group_tasks`, `tour_generics`, `tenant_user_permissions` |
+| V005 | Data-only — renames `OPS_ACTIVITIES` program entry to `OPS_TASKS` |
 
 The `must_change_password` column is in the **AuthDb** (`nova_auth` schema), managed by `Nova.CommonUX.Api` migrations:
 ```
@@ -166,3 +181,164 @@ src/services/Nova.CommonUX.Api/Migrations/
 | 3 (highest) | `{specific}` | `{specific}` | Exact branch |
 
 When the same `status_code` exists at multiple tiers, the most specific tier wins. `frz_ind = true` rows are excluded.
+
+---
+
+## Users by Role
+
+`POST /api/v1/users/by-role`
+
+Returns ops team members for the caller's tenant and company, filtered by role code.
+
+**Request body:**
+```json
+{
+  "tenant_id":          "BTDK",
+  "company_code":       "MAIN",
+  "branch_code":        "LON",
+  "user_id":            "USR001",
+  "browser_locale":     "en-GB",
+  "browser_timezone":   "Europe/London",
+  "ip_address":         "203.0.113.1",
+  "roles":              ["ops_manager", "ops_exec"],
+  "branch_code_filter": ["LON", "MAN"]
+}
+```
+
+- `roles` — optional; defaults to `["ops_manager", "ops_exec"]` when omitted.
+- `branch_code_filter` — optional; when supplied, only users with a right on one of these branch codes are returned. When omitted, the query includes users with `branch_code = @BranchCode` (caller's own branch) or `branch_code = 'XXXX'` (all-branch wildcard).
+
+**Response:**
+```json
+{
+  "team_members": [
+    {
+      "user_id":  "MGR001",
+      "name":     "Alice Smith",
+      "initials": "AS",
+      "roles":    ["ops_manager"]
+    }
+  ]
+}
+```
+
+A user holding both roles appears once with both listed. Reads `nova_auth.user_security_rights` and `nova_auth.tenant_user_profile` in AuthDb.
+
+---
+
+## Tour Generics
+
+**Catalogue — `POST /api/v1/groups/tour-generics`**
+
+Returns the full active tour generics list for the tenant, ordered by name. Typically used
+to pre-load a Fuse.js index for client-side fuzzy search.
+
+**Response:**
+```json
+{
+  "tour_generics": [
+    { "code": "BHU", "name": "Bhutan Cultural" },
+    { "code": "NEP", "name": "Nepal Base Camp" }
+  ]
+}
+```
+
+**Typeahead search — `POST /api/v1/groups/tour-generics/search`**
+
+Server-side LIKE search fallback for large catalogues or when `tenantConfig.search.tgMode === 'like'`.
+
+**Additional request fields:**
+```json
+{
+  "query": "nepal",
+  "field": "name",
+  "limit": 20
+}
+```
+
+- `field`: `"name"` (default) or `"code"`
+- `limit`: 1–100, defaults to 20
+- `query`: empty string returns an empty list immediately (no DB hit)
+
+Response shape is identical to the catalogue endpoint.
+
+---
+
+## Group Task Templates
+
+Three endpoints share the `presets.group_tasks` table.
+
+**List — `POST /api/v1/tasks`**
+
+Returns all task templates for the tenant. `sort_order` controls display order; rows with
+`sort_order = NULL` sort last. `frz_ind = true` rows are excluded unless
+`include_frozen: true` is sent.
+
+**Additional request field:**
+```json
+{ "include_frozen": false }
+```
+
+**Response:**
+```json
+{
+  "tasks": [
+    {
+      "code":                       "PRE_DOCS",
+      "name":                       "Pre-departure documents",
+      "required":                   true,
+      "critical":                   false,
+      "group_task_sla_offset_days": -7,
+      "reference_date":             "departure",
+      "source":                     "GLOBAL",
+      "sort_order":                 1,
+      "frz_ind":                    false
+    }
+  ]
+}
+```
+
+**Save — `PATCH /api/v1/tasks/{code}`**
+
+Partial update — only include fields to change. Setting `frz_ind: true` soft-deletes the
+template (no hard-delete endpoint exists).
+
+**Request body (all fields optional):**
+```json
+{
+  "tenant_id":                  "BTDK",
+  "company_code":               "MAIN",
+  "branch_code":                "LON",
+  "user_id":                    "USR001",
+  "browser_locale":             "en-GB",
+  "browser_timezone":           "Europe/London",
+  "ip_address":                 "203.0.113.1",
+  "name":                       "Updated task name",
+  "required":                   true,
+  "critical":                   false,
+  "group_task_sla_offset_days": -5,
+  "reference_date":             "return",
+  "source":                     "TG",
+  "frz_ind":                    false
+}
+```
+
+Returns `{ "success": true }` on success, 404 if the code is not found for this tenant.
+
+**Reorder — `PATCH /api/v1/tasks/reorder`**
+
+Atomically updates `sort_order` for a list of task codes within a single transaction.
+All codes must exist for this tenant — if any are unknown, the whole request is rejected
+with 409 and an `unknown_codes` extension listing the bad values.
+
+**Additional request field:**
+```json
+{
+  "order": [
+    { "code": "PRE_DOCS", "sort_order": 1 },
+    { "code": "VIS_CHECK", "sort_order": 2 }
+  ]
+}
+```
+
+Returns `{ "success": true }` on success.

@@ -197,7 +197,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": { "raw": "{{base_url}}/api/v1/group-task-codes-available", "host": ["{{base_url}}"], "path": ["api","v1","group-task-codes-available"] },
             "body": { "mode": "raw", "raw": "{\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"company_code\": \"{{company_code}}\",\n  \"branch_code\": \"{{branch_code}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"browser_locale\": \"en-GB\",\n  \"browser_timezone\": \"Europe/London\",\n  \"ip_address\": \"203.0.113.42\",\n  \"tour_generic_code\": null\n}" },
-            "description": "Queries PresetsDb (presets.group_task_templates) for available task codes for this tenant. Used to populate the SLA hierarchy grid columns."
+            "description": "Queries PresetsDb (presets.group_tasks) for available task codes for this tenant. Used to populate the SLA hierarchy grid columns."
           },
           "response": [
             { "name": "200 OK", "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\n  \"available_codes\": [\n    { \"code\": \"HOTEL\",  \"name\": \"Hotel Rooming\",   \"source\": \"GLOBAL\" },\n    { \"code\": \"VISA\",   \"name\": \"Visa Check\",       \"source\": \"GLOBAL\" }\n  ]\n}" }

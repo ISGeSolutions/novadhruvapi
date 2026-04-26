@@ -73,23 +73,27 @@ public static class LoginEndpoint
 
         if (!passwordOk)
         {
-            int newCount = row.FailedLoginCount + 1;
-            DateTimeOffset? lockUntil = newCount >= authOpts.FailedLoginMaxAttempts
-                ? DateTimeOffset.UtcNow.AddMinutes(authOpts.FailedLoginLockoutMinutes)
-                : null;
-
+            // Atomic increment — avoids the read-then-write race under concurrent failed logins.
+            // CASE WHEN uses the post-increment value to decide whether to lock the account.
             await connection.ExecuteAsync(
                 $"""
                 UPDATE {userAuth}
-                SET failed_login_count = @Count,
-                    locked_until       = @LockUntil,
+                SET failed_login_count = failed_login_count + 1,
+                    locked_until       = CASE WHEN failed_login_count + 1 >= @MaxAttempts
+                                              THEN @LockUntilIfLocked ELSE NULL END,
                     updated_on         = @Now,
                     updated_by         = 'system',
                     updated_at         = 'Nova.CommonUX.Api'
                 WHERE tenant_id = @TenantId AND user_id = @UserId
                 """,
-                new { Count = newCount, LockUntil = lockUntil, Now = AuthDbHelper.UtcNow(),
-                      request.TenantId, request.UserId },
+                new
+                {
+                    MaxAttempts     = authOpts.FailedLoginMaxAttempts,
+                    LockUntilIfLocked = DateTimeOffset.UtcNow.AddMinutes(authOpts.FailedLoginLockoutMinutes),
+                    Now             = AuthDbHelper.UtcNow(),
+                    request.TenantId,
+                    request.UserId,
+                },
                 commandTimeout: 10);
 
             return Unauthorized();

@@ -78,11 +78,17 @@ public static class ResetPasswordEndpoint
 
         string newHash = Argon2idHasher.Hash(request.NewPassword!);
 
-        // Mark token as used
-        await connection.ExecuteAsync(
-            $"UPDATE {authTokens} SET used_on = @Now WHERE id = @Id",
+        // Atomically claim the token — guards against two simultaneous requests with the same token.
+        int tokenUsed = await connection.ExecuteAsync(
+            $"UPDATE {authTokens} SET used_on = @Now WHERE id = @Id AND used_on IS NULL",
             new { Now = now, tokenRow.Id },
             commandTimeout: 10);
+
+        if (tokenUsed == 0)
+            return TypedResults.Problem(
+                title:      "Unauthorized",
+                detail:     "Invalid or expired reset token.",
+                statusCode: StatusCodes.Status401Unauthorized);
 
         // Update password hash
         await connection.ExecuteAsync(

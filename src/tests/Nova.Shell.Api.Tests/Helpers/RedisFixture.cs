@@ -27,7 +27,7 @@ namespace Nova.Shell.Api.Tests.Helpers;
 /// </example>
 public sealed class RedisFixture : IAsyncLifetime
 {
-    public RedisContainer Container { get; } = new RedisBuilder().Build();
+    public RedisContainer Container { get; } = new RedisBuilder("redis:7-alpine").Build();
 
     /// <summary>Connection string for the running Redis container.</summary>
     public string ConnectionString => Container.GetConnectionString();

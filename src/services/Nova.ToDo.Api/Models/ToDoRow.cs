@@ -62,5 +62,6 @@ internal sealed record ToDoRow(
     DateTime  CreatedOn,            // UTC timestamp
     string    UpdatedBy,
     DateTime  UpdatedOn,            // UTC timestamp
-    string    UpdatedAt             // client IP address — not a timestamp
+    string    UpdatedAt,            // client IP address — not a timestamp
+    int       LockVer               // optimistic concurrency token — see docs/concurrency-field-group-versioning.md
 );

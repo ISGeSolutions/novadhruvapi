@@ -1,11 +1,9 @@
 using System.Data;
 using Dapper;
-using Microsoft.Extensions.Options;
 using Nova.Shared.Data;
 using Nova.Shared.Requests;
 using Nova.Shared.Tenancy;
 using Nova.Shared.Validation;
-using Nova.ToDo.Api.Configuration;
 using Nova.ToDo.Api.Models;
 
 namespace Nova.ToDo.Api.Endpoints;
@@ -34,12 +32,11 @@ public static class CreateToDoEndpoint
     }
 
     private static async Task<IResult> HandleAsync(
-        CreateToDoRequest                     request,
-        TenantContext                         tenantContext,
-        IDbConnectionFactory                  connectionFactory,
-        ISqlDialect                           dialect,
-        IOptionsSnapshot<ConcurrencySettings> concurrencyOptions,
-        CancellationToken                     ct)
+        CreateToDoRequest    request,
+        TenantContext        tenantContext,
+        IDbConnectionFactory connectionFactory,
+        ISqlDialect          dialect,
+        CancellationToken    ct)
     {
         Dictionary<string, string[]> contextErrors = RequestContextValidator.Validate(request);
         if (contextErrors.Count > 0)

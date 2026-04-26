@@ -63,11 +63,17 @@ public static class MagicLinkVerifyEndpoint
                 detail:     "Invalid or expired magic link token.",
                 statusCode: StatusCodes.Status401Unauthorized);
 
-        // Mark token used
-        await connection.ExecuteAsync(
-            $"UPDATE {authTokens} SET used_on = @Now WHERE id = @Id",
+        // Atomically claim the token — guards against two simultaneous requests with the same token.
+        int tokenUsed = await connection.ExecuteAsync(
+            $"UPDATE {authTokens} SET used_on = @Now WHERE id = @Id AND used_on IS NULL",
             new { Now = now, row.Id },
             commandTimeout: 10);
+
+        if (tokenUsed == 0)
+            return TypedResults.Problem(
+                title:      "Unauthorized",
+                detail:     "Invalid or expired magic link token.",
+                statusCode: StatusCodes.Status401Unauthorized);
 
         ProfileRow? prof = await connection.QuerySingleOrDefaultAsync<ProfileRow>(
             $"""

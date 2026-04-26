@@ -40,18 +40,20 @@ public static class DashboardEndpoints
     // -------------------------------------------------------------------------
     private sealed record FilterRequest : RequestContext
     {
-        public DateOnly? DateFrom        { get; init; }
-        public DateOnly? DateTo          { get; init; }
-        public new string? BranchCode    { get; init; }
-        public string?   TourGenericCode { get; init; }
-        public string?   SeriesCode      { get; init; }
-        public string?   DestinationCode { get; init; }
-        public string?   OpsManager      { get; init; }
-        public string?   OpsExec         { get; init; }
-        public string?   Search          { get; init; }
-        public int?      Page            { get; init; }
-        public int?      PageSize        { get; init; }
-        public DateOnly? WindowStart     { get; init; }
+        public DateOnly?   DateFrom         { get; init; }
+        public DateOnly?   DateTo           { get; init; }
+        public new string? BranchCode       { get; init; }
+        public string?     TourGenericCode  { get; init; }
+        public string?     SeriesCode       { get; init; }
+        public string?     DestinationCode  { get; init; }
+        public string?     OpsManager       { get; init; }
+        public string?     OpsExec          { get; init; }
+        public string?     Search           { get; init; }
+        public int?        Page             { get; init; }
+        public int?        PageSize         { get; init; }
+        public DateOnly?   WindowStart      { get; init; }
+        public string[]?   BranchCodeFilter { get; init; }
+        public string?     QuickStatus      { get; init; }
     }
 
     private static DepartureFilters ToFilters(FilterRequest r) => new(
@@ -64,21 +66,24 @@ public static class DashboardEndpoints
         r.OpsManager,
         r.OpsExec,
         string.IsNullOrEmpty(r.Search) ? null : $"%{r.Search}%",
-        r.WindowStart);
+        r.WindowStart,
+        r.BranchCodeFilter);
 
     private static DynamicParameters BuildFilterParams(FilterRequest request)
     {
         var p = new DynamicParameters();
         p.Add("TenantId", request.TenantId);
-        if (request.DateFrom.HasValue)                       p.Add("DateFrom",        request.DateFrom);
-        if (request.DateTo.HasValue)                         p.Add("DateTo",          request.DateTo);
-        if (!string.IsNullOrEmpty(request.BranchCode))      p.Add("BranchCode",      request.BranchCode);
-        if (!string.IsNullOrEmpty(request.SeriesCode))      p.Add("SeriesCode",      request.SeriesCode);
-        if (!string.IsNullOrEmpty(request.DestinationCode)) p.Add("DestinationCode", request.DestinationCode);
-        if (!string.IsNullOrEmpty(request.OpsManager))      p.Add("OpsManager",      request.OpsManager);
-        if (!string.IsNullOrEmpty(request.OpsExec))         p.Add("OpsExec",         request.OpsExec);
-        if (!string.IsNullOrEmpty(request.Search))          p.Add("Search",          $"%{request.Search}%");
-        if (request.WindowStart.HasValue)                   p.Add("WindowStart",     request.WindowStart);
+        if (request.DateFrom.HasValue)                           p.Add("DateFrom",         request.DateFrom);
+        if (request.DateTo.HasValue)                             p.Add("DateTo",           request.DateTo);
+        if (request.BranchCodeFilter is { Length: > 0 })        p.Add("BranchCodeFilter", request.BranchCodeFilter);
+        else if (!string.IsNullOrEmpty(request.BranchCode))     p.Add("BranchCode",       request.BranchCode);
+        if (!string.IsNullOrEmpty(request.TourGenericCode))     p.Add("TourGenericCode",  request.TourGenericCode);
+        if (!string.IsNullOrEmpty(request.SeriesCode))          p.Add("SeriesCode",       request.SeriesCode);
+        if (!string.IsNullOrEmpty(request.DestinationCode))     p.Add("DestinationCode",  request.DestinationCode);
+        if (!string.IsNullOrEmpty(request.OpsManager))          p.Add("OpsManager",       request.OpsManager);
+        if (!string.IsNullOrEmpty(request.OpsExec))             p.Add("OpsExec",          request.OpsExec);
+        if (!string.IsNullOrEmpty(request.Search))              p.Add("Search",           $"%{request.Search}%");
+        if (request.WindowStart.HasValue)                       p.Add("WindowStart",      request.WindowStart);
         return p;
     }
 
@@ -111,6 +116,7 @@ public static class DashboardEndpoints
 
         IEnumerable<DepartureRow>   departures;
         IEnumerable<GroupTaskRow>   allTasks;
+        BusinessRulesRow?           rules;
 
         using (IDbConnection conn = connectionFactory.CreateFromConnectionString(db.ConnectionString, db.DbType))
         {
@@ -126,11 +132,18 @@ public static class DashboardEndpoints
                     OpsGroupsDbHelper.GroupTasksByDepartureIdsSql(db),
                     new { request.TenantId, DepartureIds = depIds },
                     commandTimeout: 15);
+
+            rules = await conn.QueryFirstOrDefaultAsync<BusinessRulesRow>(
+                OpsGroupsDbHelper.BusinessRulesFetchSql(db),
+                new { request.TenantId, request.CompanyCode, BranchCode = request.BranchCode ?? string.Empty },
+                commandTimeout: 10);
         }
 
         var tasksByDep = allTasks.GroupBy(t => t.DepartureId)
                                   .ToDictionary(g => g.Key, g => g.ToList());
 
+        string readinessMethod      = rules?.ReadinessMethod      ?? "required_only";
+        bool   includeNaInReadiness = rules?.IncludeNaInReadiness ?? false;
         int total       = 0, atRisk = 0, ready = 0, overdue = 0, dueLater = 0, doneToday = 0, donePast = 0;
         double readSum  = 0;
         DateOnly today  = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -139,8 +152,7 @@ public static class DashboardEndpoints
         {
             total++;
             var tasks     = tasksByDep.TryGetValue(dep.DepartureId, out var t) ? t : new();
-            // TODO: pass rules.ReadinessMethod and rules.IncludeNaInReadiness once BusinessRulesRow is fetched for this endpoint.
-            int readiness = OpsGroupsDbHelper.ComputeReadinessPct(tasks);
+            int readiness = OpsGroupsDbHelper.ComputeReadinessPct(tasks, readinessMethod, includeNaInReadiness);
             readSum      += readiness;
             string risk   = OpsGroupsDbHelper.ComputeRiskLevel(readiness);
 
@@ -183,12 +195,18 @@ public static class DashboardEndpoints
         DepartureFilters    filters = ToFilters(request);
         var                 p       = BuildFilterParams(request);
 
-        IEnumerable<FacetRow> rows;
-        int                   total;
+        IEnumerable<FacetRow>             rows;
+        IEnumerable<FacetsTourGenericRow> tourGenericRows;
+        int                               total;
         using (IDbConnection conn = connectionFactory.CreateFromConnectionString(db.ConnectionString, db.DbType))
         {
             rows = await conn.QueryAsync<FacetRow>(
                 OpsGroupsDbHelper.FacetsSql(db, filters),
+                p,
+                commandTimeout: 15);
+
+            tourGenericRows = await conn.QueryAsync<FacetsTourGenericRow>(
+                OpsGroupsDbHelper.FacetsTourGenericsSql(db, filters),
                 p,
                 commandTimeout: 15);
 
@@ -209,7 +227,7 @@ public static class DashboardEndpoints
             execs    = facets.Where(r => !string.IsNullOrEmpty(r.OpsExecInitials))
                              .Select(r => new { initials = r.OpsExecInitials, name = r.OpsExecName })
                              .DistinctBy(e => e.initials).OrderBy(e => e.name).ToList(),
-            tour_generics = Array.Empty<object>(),
+            tour_generics = tourGenericRows.Select(r => new { code = r.TourGenericCode, name = r.TourGenericName }).ToList(),
             tour_series   = facets.Select(r => new { code = r.SeriesCode, name = r.SeriesName })
                                   .DistinctBy(s => s.code).OrderBy(s => s.code).ToList(),
             total_matching = total,
@@ -240,6 +258,7 @@ public static class DashboardEndpoints
 
         IEnumerable<DepartureRow> departures;
         IEnumerable<GroupTaskRow> allTasks;
+        BusinessRulesRow?         rules;
         int                       total;
 
         using (IDbConnection conn = connectionFactory.CreateFromConnectionString(db.ConnectionString, db.DbType))
@@ -261,15 +280,23 @@ public static class DashboardEndpoints
                     OpsGroupsDbHelper.GroupTasksByDepartureIdsSql(db),
                     new { request.TenantId, DepartureIds = depIds },
                     commandTimeout: 15);
+
+            rules = await conn.QueryFirstOrDefaultAsync<BusinessRulesRow>(
+                OpsGroupsDbHelper.BusinessRulesFetchSql(db),
+                new { request.TenantId, request.CompanyCode, BranchCode = request.BranchCode ?? string.Empty },
+                commandTimeout: 10);
         }
 
         var tasksByDep = allTasks.GroupBy(t => t.DepartureId)
                                   .ToDictionary(g => g.Key, g => g.ToList());
 
+        string readinessMethod      = rules?.ReadinessMethod      ?? "required_only";
+        bool   includeNaInReadiness = rules?.IncludeNaInReadiness ?? false;
+
         var items = departures.Select(dep =>
         {
             var tasks      = tasksByDep.TryGetValue(dep.DepartureId, out var t) ? t : new();
-            int readiness  = OpsGroupsDbHelper.ComputeReadinessPct(tasks);
+            int readiness  = OpsGroupsDbHelper.ComputeReadinessPct(tasks, readinessMethod, includeNaInReadiness);
             string risk    = OpsGroupsDbHelper.ComputeRiskLevel(readiness);
             return new
             {
@@ -320,6 +347,7 @@ public static class DashboardEndpoints
         IEnumerable<SeriesAggRow>   seriesAgg;
         IEnumerable<DepartureRow>   departures;
         IEnumerable<GroupTaskRow>   allTasks;
+        BusinessRulesRow?           rules;
 
         using (IDbConnection conn = connectionFactory.CreateFromConnectionString(db.ConnectionString, db.DbType))
         {
@@ -340,8 +368,15 @@ public static class DashboardEndpoints
                     OpsGroupsDbHelper.GroupTasksByDepartureIdsSql(db),
                     new { request.TenantId, DepartureIds = depIds },
                     commandTimeout: 15);
+
+            rules = await conn.QueryFirstOrDefaultAsync<BusinessRulesRow>(
+                OpsGroupsDbHelper.BusinessRulesFetchSql(db),
+                new { request.TenantId, request.CompanyCode, BranchCode = request.BranchCode ?? string.Empty },
+                commandTimeout: 10);
         }
 
+        string readinessMethod      = rules?.ReadinessMethod      ?? "required_only";
+        bool   includeNaInReadiness = rules?.IncludeNaInReadiness ?? false;
         var tasksByDep  = allTasks.GroupBy(t => t.DepartureId).ToDictionary(g => g.Key, g => g.ToList());
         var depBySeries = departures.GroupBy(d => d.SeriesCode).ToDictionary(g => g.Key, g => g.ToList());
 
@@ -354,8 +389,7 @@ public static class DashboardEndpoints
             foreach (var dep in deps)
             {
                 var tasks     = tasksByDep.TryGetValue(dep.DepartureId, out var t) ? t : new();
-                // TODO: pass rules.ReadinessMethod and rules.IncludeNaInReadiness once BusinessRulesRow is fetched for this endpoint.
-            int readiness = OpsGroupsDbHelper.ComputeReadinessPct(tasks);
+                int readiness = OpsGroupsDbHelper.ComputeReadinessPct(tasks, readinessMethod, includeNaInReadiness);
                 string risk   = OpsGroupsDbHelper.ComputeRiskLevel(readiness);
                 if (risk == "green") greenCount++;
                 else if (risk == "amber") amberCount++;
@@ -380,8 +414,7 @@ public static class DashboardEndpoints
                 departures = deps.Select(dep =>
                 {
                     var tasks     = tasksByDep.TryGetValue(dep.DepartureId, out var t) ? t : new();
-                    // TODO: pass rules.ReadinessMethod and rules.IncludeNaInReadiness once BusinessRulesRow is fetched for this endpoint.
-            int readiness = OpsGroupsDbHelper.ComputeReadinessPct(tasks);
+                    int readiness = OpsGroupsDbHelper.ComputeReadinessPct(tasks, readinessMethod, includeNaInReadiness);
                     return new
                     {
                         departure_id     = dep.DepartureId,
@@ -421,6 +454,7 @@ public static class DashboardEndpoints
         IEnumerable<DateOnly>    dates;
         IEnumerable<DepartureRow> departures;
         IEnumerable<GroupTaskRow> allTasks;
+        BusinessRulesRow?         rules;
 
         using (IDbConnection conn = connectionFactory.CreateFromConnectionString(db.ConnectionString, db.DbType))
         {
@@ -442,8 +476,15 @@ public static class DashboardEndpoints
                     OpsGroupsDbHelper.GroupTasksByDepartureIdsSql(db),
                     new { request.TenantId, DepartureIds = depIds },
                     commandTimeout: 15);
+
+            rules = await conn.QueryFirstOrDefaultAsync<BusinessRulesRow>(
+                OpsGroupsDbHelper.BusinessRulesFetchSql(db),
+                new { request.TenantId, request.CompanyCode, BranchCode = request.BranchCode ?? string.Empty },
+                commandTimeout: 10);
         }
 
+        string readinessMethod      = rules?.ReadinessMethod      ?? "required_only";
+        bool   includeNaInReadiness = rules?.IncludeNaInReadiness ?? false;
         var dateList   = dates.Take(28).ToList();
         var tasksByDep = allTasks.GroupBy(t => t.DepartureId).ToDictionary(g => g.Key, g => g.ToList());
 
@@ -465,8 +506,7 @@ public static class DashboardEndpoints
                     return (object)new { date, departure_id = (string?)null, readiness_pct = (int?)null, risk_level = (string?)null };
 
                 var tasks     = tasksByDep.TryGetValue(dep.DepartureId, out var t) ? t : new();
-                // TODO: pass rules.ReadinessMethod and rules.IncludeNaInReadiness once BusinessRulesRow is fetched for this endpoint.
-            int readiness = OpsGroupsDbHelper.ComputeReadinessPct(tasks);
+                int readiness = OpsGroupsDbHelper.ComputeReadinessPct(tasks, readinessMethod, includeNaInReadiness);
                 return (object)new
                 {
                     date,
@@ -500,6 +540,8 @@ public static class DashboardEndpoints
         string OpsExecName,
         string SeriesCode,
         string SeriesName);
+
+    private sealed record FacetsTourGenericRow(string TourGenericCode, string TourGenericName);
 
     private sealed record SeriesAggRow(
         string SeriesCode,

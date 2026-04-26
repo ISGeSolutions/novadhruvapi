@@ -1,11 +1,10 @@
 using System.Data;
 using Dapper;
-using Microsoft.Extensions.Options;
 using Nova.Shared.Data;
 using Nova.Shared.Requests;
 using Nova.Shared.Tenancy;
 using Nova.Shared.Validation;
-using Nova.ToDo.Api.Configuration;
+using Nova.ToDo.Api.Models;
 
 namespace Nova.ToDo.Api.Endpoints;
 
@@ -23,13 +22,12 @@ public static class UndoCompleteToDoEndpoint
     }
 
     private static async Task<IResult> HandleAsync(
-        int                                   seqNo,
-        UndoCompleteRequest                   request,
-        TenantContext                         tenantContext,
-        IDbConnectionFactory                  connectionFactory,
-        ISqlDialect                           dialect,
-        IOptionsSnapshot<ConcurrencySettings> concurrencyOptions,
-        CancellationToken                     ct)
+        int                  seqNo,
+        UndoCompleteRequest  request,
+        TenantContext        tenantContext,
+        IDbConnectionFactory connectionFactory,
+        ISqlDialect          dialect,
+        CancellationToken    ct)
     {
         Dictionary<string, string[]> contextErrors = RequestContextValidator.Validate(request);
         if (contextErrors.Count > 0)
@@ -41,42 +39,22 @@ public static class UndoCompleteToDoEndpoint
                 detail:     "tenant_id in the request body does not match the authenticated tenant.",
                 statusCode: StatusCodes.Status403Forbidden);
 
-        if (request.UpdatedOn == default)
+        if (request.ExpectedLockVer is null)
             return TypedResults.ValidationProblem(
-                new Dictionary<string, string[]> { ["updated_on"] = ["updated_on is required for concurrency check."] },
+                new Dictionary<string, string[]> { ["expected_lock_ver"] = ["expected_lock_ver is required for concurrency check."] },
                 title: "Validation failed");
 
         // TODO: rights check — user must have complete rights for ToDo (same as complete)
 
-        string todo   = dialect.TableRef("sales97", "ToDo");
+        string todo    = dialect.TableRef("sales97", "ToDo");
         string doneOff = dialect.BooleanLiteral(false);
+        int    nextVer = ConcurrencyHelper.NextVersion(request.ExpectedLockVer.Value);
 
         using IDbConnection connection = connectionFactory.CreateForTenant(tenantContext);
 
         // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
-        CurrentRow? current = await connection.QuerySingleOrDefaultAsync<CurrentRow>(
-            $"SELECT SeqNo, DoneInd, UpdatedOn FROM {todo} WHERE SeqNo = @SeqNo",
-            new { SeqNo = seqNo }, commandTimeout: 30);
-
-        if (current is null)
-            return TypedResults.Problem(
-                title:      "Not found",
-                detail:     $"ToDo record with seq_no {seqNo} was not found.",
-                statusCode: StatusCodes.Status404NotFound);
-
-        ConcurrencySettings concurrency = concurrencyOptions.Value;
-        if (concurrency.StrictMode)
-        {
-            DateTimeOffset dbOffset = new(DateTime.SpecifyKind(current.UpdatedOn, DateTimeKind.Utc));
-            if (dbOffset > request.UpdatedOn)
-                return TypedResults.Problem(
-                    title:      "Conflict",
-                    detail:     concurrency.ConflictMessage,
-                    statusCode: StatusCodes.Status409Conflict);
-        }
-
-        // TODO (item 3): GETUTCDATE() is MSSQL-only — replace per dialect.
-        await connection.ExecuteAsync(
+        // TODO (item 3): GETUTCDATE() is MSSQL-only — replace per dialect when porting.
+        int affected = await connection.ExecuteAsync(
             $"""
             UPDATE {todo} SET
                 DoneInd   = {doneOff},
@@ -84,24 +62,45 @@ public static class UndoCompleteToDoEndpoint
                 DoneOn    = NULL,
                 UpdatedBy = @UpdatedBy,
                 UpdatedOn = GETUTCDATE(),
-                UpdatedAt = @UpdatedAt
-            WHERE SeqNo = @SeqNo
+                UpdatedAt = @UpdatedAt,
+                lock_ver  = @NextLockVer
+            WHERE SeqNo = @SeqNo AND lock_ver = @ExpectedLockVer
             """,
             new
             {
-                UpdatedBy = request.UserId,
-                UpdatedAt = request.IpAddress ?? "unknown",
-                SeqNo     = seqNo,
+                UpdatedBy       = request.UserId,
+                UpdatedAt       = request.IpAddress ?? "unknown",
+                SeqNo           = seqNo,
+                ExpectedLockVer = request.ExpectedLockVer.Value,
+                NextLockVer     = nextVer,
             },
             commandTimeout: 30);
 
-        return TypedResults.Ok(new { seq_no = seqNo.ToString(), done_ind = false });
-    }
+        if (affected == 0)
+        {
+            ToDoRow? current = await ToDoDbHelper.FetchBySeqNoAsync(connection, dialect, seqNo);
+            if (current is null)
+                return TypedResults.Problem(
+                    title:      "Not found",
+                    detail:     $"ToDo record with seq_no {seqNo} was not found.",
+                    statusCode: StatusCodes.Status404NotFound);
+            return TypedResults.Problem(
+                title:      "Conflict",
+                detail:     "Record was updated by someone else. Refresh and try again.",
+                statusCode: StatusCodes.Status409Conflict,
+                extensions: new Dictionary<string, object?>
+                {
+                    ["seq_no"]          = seqNo.ToString(),
+                    ["server_lock_ver"] = current.LockVer,
+                    ["server_row"]      = ToDoProjections.Project(current),
+                });
+        }
 
-    private sealed record CurrentRow(int SeqNo, bool DoneInd, DateTime UpdatedOn);
+        return TypedResults.Ok(new { seq_no = seqNo.ToString(), done_ind = false, lock_ver = nextVer });
+    }
 
     private sealed record UndoCompleteRequest : RequestContext
     {
-        public DateTimeOffset UpdatedOn { get; init; }
+        public int? ExpectedLockVer { get; init; }
     }
 }

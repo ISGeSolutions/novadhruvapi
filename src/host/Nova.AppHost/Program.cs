@@ -13,9 +13,12 @@ string encryptionKey = builder.Configuration["ENCRYPTION_KEY"]
 bool useRedis    = builder.Configuration.GetValue<bool>("Infrastructure:UseRedis");
 bool useRabbitMq = builder.Configuration.GetValue<bool>("Infrastructure:UseRabbitMQ");
 bool useSeq      = builder.Configuration.GetValue<bool>("Infrastructure:UseSeq");
+bool useMariaDb  = builder.Configuration.GetValue<bool>("Infrastructure:UseMariaDb");
+bool usePostgres = builder.Configuration.GetValue<bool>("Infrastructure:UsePostgres");
+bool useMsSql    = builder.Configuration.GetValue<bool>("Infrastructure:UseMsSql");
 
 // Fail fast if Docker is not running and at least one container service is required.
-if ((useRedis || useRabbitMq || useSeq) && !IsDockerAvailable())
+if ((useRedis || useRabbitMq || useSeq || useMariaDb || usePostgres || useMsSql) && !IsDockerAvailable())
 {
     Console.Error.WriteLine("[AppHost] Docker is not running or is not reachable.");
     Console.Error.WriteLine("[AppHost] Start Docker Desktop (or the Docker daemon) and retry.");
@@ -44,6 +47,28 @@ IResourceBuilder<RabbitMQServerResource>? rabbitmq = useRabbitMq
 IResourceBuilder<SeqResource>? seq = useSeq
     ? builder.AddSeq("seq").WithLifetime(ContainerLifetime.Persistent)
     : null;
+
+// MariaDB — only started when Infrastructure:UseMariaDb = true.
+// Standard port 3306 pinned. Services connect via their own tenant connection strings in opsettings.json.
+// WithLifetime(Persistent): data survives AppHost restarts.
+// Aspire dashboard shows connection details; default root password is set via MARIADB_ROOT_PASSWORD.
+if (useMariaDb)
+    builder.AddMySql("mariadb", port: 3306)
+           .WithLifetime(ContainerLifetime.Persistent);
+
+// Postgres — only started when Infrastructure:UsePostgres = true.
+// Standard port 5432 pinned. Services connect via their own tenant connection strings in opsettings.json.
+if (usePostgres)
+    builder.AddPostgres("postgres", port: 5432)
+           .WithLifetime(ContainerLifetime.Persistent)
+           .WithPgAdmin();
+
+// SQL Server — only started when Infrastructure:UseMsSql = true.
+// Standard port 1433 pinned. Use when a remote MSSQL server is not available.
+// SA password must be set — Aspire generates one and shows it in the dashboard.
+if (useMsSql)
+    builder.AddSqlServer("mssql", port: 1433)
+           .WithLifetime(ContainerLifetime.Persistent);
 
 // Shell.Api — uses Redis (cache + distributed lock + outbox relay) and optionally RabbitMQ (outbox relay).
 var shell = builder.AddProject<Projects.Nova_Shell_Api>("shell")

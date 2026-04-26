@@ -42,9 +42,14 @@ public static class SummaryStatsEndpoint
         DateTimeOffset      todayUtc  = new(DateTime.UtcNow.Date, TimeSpan.Zero);
         DateOnly            weekEnd   = today.AddDays(7);
 
-        // Fetch business rules so readiness method and N/A flag are respected.
-        BusinessRulesRow? rules;
-        SummaryStatsRow   stats;
+        DateOnly dateFrom = request.DateFrom ?? today;
+        DateOnly dateTo   = request.DateTo   ?? today.AddDays(365);
+
+        BusinessRulesRow?           rules;
+        SummaryStatsRow             stats;
+        IEnumerable<DepartureRow>   departures;
+        IEnumerable<GroupTaskRow>   allTasks;
+
         using (IDbConnection conn = connectionFactory.CreateFromConnectionString(db.ConnectionString, db.DbType))
         {
             rules = await conn.QueryFirstOrDefaultAsync<BusinessRulesRow>(
@@ -57,28 +62,47 @@ public static class SummaryStatsEndpoint
                 new
                 {
                     request.TenantId,
-                    DateFrom = request.DateFrom ?? today,
-                    DateTo   = request.DateTo   ?? today.AddDays(365),
+                    DateFrom = dateFrom,
+                    DateTo   = dateTo,
                     Today    = today,
                     WeekEnd  = weekEnd,
                     TodayUtc = todayUtc,
                 },
                 commandTimeout: 15);
+
+            var depFilters = new DepartureFilters(dateFrom, dateTo, null, null, null, null, null, null, null);
+            var p = new DynamicParameters();
+            p.Add("TenantId", request.TenantId);
+            p.Add("DateFrom", dateFrom);
+            p.Add("DateTo",   dateTo);
+
+            departures = await conn.QueryAsync<DepartureRow>(
+                OpsGroupsDbHelper.DeparturesListSql(db, depFilters, 0, 10000),
+                p,
+                commandTimeout: 15);
+
+            var depIds = departures.Select(d => d.DepartureId).ToList();
+            allTasks = depIds.Count == 0
+                ? Enumerable.Empty<GroupTaskRow>()
+                : await conn.QueryAsync<GroupTaskRow>(
+                    OpsGroupsDbHelper.GroupTasksByDepartureIdsSql(db),
+                    new { request.TenantId, DepartureIds = depIds },
+                    commandTimeout: 15);
         }
 
         string readinessMethod      = rules?.ReadinessMethod      ?? "required_only";
         bool   includeNaInReadiness = rules?.IncludeNaInReadiness ?? false;
 
-        // TODO: compute readiness_avg_pct across all departures in the date window.
-        // The SummaryStatsSql correlated-subquery path does not return per-departure task data,
-        // so avg readiness cannot be derived from `stats` alone.
-        // Options:
-        //   A) Fetch departures + tasks (same as DashboardEndpoints.HandleSummaryAsync) and
-        //      average ComputeReadinessPct(tasks, readinessMethod, includeNaInReadiness) per departure.
-        //   B) Add a readiness-avg subquery to SummaryStatsSql (complex; requires task join).
-        // Option A is simplest — copy the departure+task fetch block from DashboardEndpoints.HandleSummaryAsync,
-        // then: readinessAvg = departures.Average(dep => ComputeReadinessPct(tasksByDep[dep], ...))
-        double readinessAvg = 0; // replace with computed value
+        var tasksByDep = allTasks.GroupBy(t => t.DepartureId).ToDictionary(g => g.Key, g => g.ToList());
+        var depList    = departures.ToList();
+
+        double readinessAvg = depList.Count == 0
+            ? 0
+            : depList.Average(dep =>
+                (double)OpsGroupsDbHelper.ComputeReadinessPct(
+                    tasksByDep.TryGetValue(dep.DepartureId, out var t) ? t : new(),
+                    readinessMethod,
+                    includeNaInReadiness));
 
         return TypedResults.Ok(new
         {

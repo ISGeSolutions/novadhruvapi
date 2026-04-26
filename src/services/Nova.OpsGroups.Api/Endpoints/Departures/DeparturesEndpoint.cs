@@ -44,6 +44,17 @@ public static class DeparturesEndpoint
                 detail:     "tenant_id does not match the authenticated tenant.",
                 statusCode: StatusCodes.Status403Forbidden);
 
+        bool hasOpenFilter = !string.IsNullOrEmpty(request.OpsManager)
+                          || !string.IsNullOrEmpty(request.OpsExec)
+                          || !string.IsNullOrEmpty(request.TourGenericCode);
+        if (!hasOpenFilter && (!request.DateFrom.HasValue || !request.DateTo.HasValue))
+            return TypedResults.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    ["date_from"] = ["date_from and date_to are required unless ops_manager, ops_exec, or tour_generic_code is set."],
+                },
+                title: "Validation failed");
+
         int pageSize = Math.Min(request.PageSize ?? 100, 500);
         int page     = Math.Max(request.Page     ?? 1,   1);
         int skip     = (page - 1) * pageSize;
@@ -59,12 +70,14 @@ public static class DeparturesEndpoint
             request.DestinationCode,
             request.OpsManager,
             request.OpsExec,
-            string.IsNullOrEmpty(request.Search) ? null : $"%{request.Search}%");
+            string.IsNullOrEmpty(request.Search) ? null : $"%{request.Search}%",
+            BranchCodeFilter: request.BranchCodeFilter);
 
         var p = BuildFilterParams(request);
 
         IEnumerable<DepartureRow>   departures;
         IEnumerable<GroupTaskRow>   allTasks;
+        BusinessRulesRow?           rules;
         int                         total;
 
         using (IDbConnection conn = connectionFactory.CreateFromConnectionString(db.ConnectionString, db.DbType))
@@ -89,25 +102,33 @@ public static class DeparturesEndpoint
                     OpsGroupsDbHelper.GroupTasksByDepartureIdsSql(db),
                     new { request.TenantId, DepartureIds = depIds },
                     commandTimeout: 15);
+
+            rules = await conn.QueryFirstOrDefaultAsync<BusinessRulesRow>(
+                OpsGroupsDbHelper.BusinessRulesFetchSql(db),
+                new { request.TenantId, request.CompanyCode, BranchCode = request.BranchCode ?? string.Empty },
+                commandTimeout: 10);
         }
 
         var tasksByDep = allTasks.GroupBy(t => t.DepartureId)
                                   .ToDictionary(g => g.Key, g => g.ToList());
 
-        bool   ignorComplete = request.IgnoreComplete ?? false;
-        string projection    = request.Projection ?? "full";
+        string readinessMethod      = rules?.ReadinessMethod      ?? "required_only";
+        bool   includeNaInReadiness = rules?.IncludeNaInReadiness ?? false;
+        bool     ignorComplete = request.IgnoreComplete ?? false;
+        string   projection    = request.Projection ?? "full";
+        string?  quickStatus   = request.QuickStatus;
+        DateOnly today         = DateOnly.FromDateTime(DateTime.UtcNow);
 
         var rows = departures
             .Select(d =>
             {
-                var tasks       = tasksByDep.TryGetValue(d.DepartureId, out var t) ? t : new();
-                // TODO: fetch BusinessRulesRow for tenant/company/branch and pass method + flag.
-                // e.g. ComputeReadinessPct(tasks, rules.ReadinessMethod, rules.IncludeNaInReadiness)
-                int readiness   = OpsGroupsDbHelper.ComputeReadinessPct(tasks);
+                var tasks        = tasksByDep.TryGetValue(d.DepartureId, out var t) ? t : new();
+                int readiness    = OpsGroupsDbHelper.ComputeReadinessPct(tasks, readinessMethod, includeNaInReadiness);
                 string riskLevel = OpsGroupsDbHelper.ComputeRiskLevel(readiness);
                 return (dep: d, tasks, readiness, riskLevel);
             })
             .Where(r => !ignorComplete || r.tasks.Any(t => t.Status is not "complete" and not "not_applicable"))
+            .Where(r => quickStatus is null || MatchesQuickStatus(r.tasks, r.readiness, today, quickStatus))
             .Select(r => BuildDepartureShape(r.dep, r.tasks, r.readiness, r.riskLevel, projection))
             .ToList();
 
@@ -146,6 +167,7 @@ public static class DeparturesEndpoint
 
         DepartureRow?             dep;
         IEnumerable<GroupTaskRow> tasks;
+        BusinessRulesRow?         rules;
 
         using (IDbConnection conn = connectionFactory.CreateFromConnectionString(db.ConnectionString, db.DbType))
         {
@@ -164,11 +186,18 @@ public static class DeparturesEndpoint
                 OpsGroupsDbHelper.GroupTasksByDepartureIdsSql(db),
                 new { request.TenantId, DepartureIds = new[] { departure_id } },
                 commandTimeout: 10);
+
+            rules = await conn.QueryFirstOrDefaultAsync<BusinessRulesRow>(
+                OpsGroupsDbHelper.BusinessRulesFetchSql(db),
+                new { request.TenantId, request.CompanyCode, request.BranchCode },
+                commandTimeout: 10);
         }
 
         var taskList    = tasks.ToList();
-        // TODO: pass rules.ReadinessMethod and rules.IncludeNaInReadiness once BusinessRulesRow is fetched.
-        int readiness   = OpsGroupsDbHelper.ComputeReadinessPct(taskList);
+        int readiness   = OpsGroupsDbHelper.ComputeReadinessPct(
+            taskList,
+            rules?.ReadinessMethod      ?? "required_only",
+            rules?.IncludeNaInReadiness ?? false);
         string riskLevel = OpsGroupsDbHelper.ComputeRiskLevel(readiness);
 
         DateTimeOffset lastUpdated = taskList.Count == 0
@@ -207,14 +236,16 @@ public static class DeparturesEndpoint
     {
         var p = new DynamicParameters();
         p.Add("TenantId", request.TenantId);
-        if (request.DateFrom.HasValue)                       p.Add("DateFrom",        request.DateFrom);
-        if (request.DateTo.HasValue)                         p.Add("DateTo",          request.DateTo);
-        if (!string.IsNullOrEmpty(request.BranchCode))      p.Add("BranchCode",      request.BranchCode);
-        if (!string.IsNullOrEmpty(request.SeriesCode))      p.Add("SeriesCode",      request.SeriesCode);
-        if (!string.IsNullOrEmpty(request.DestinationCode)) p.Add("DestinationCode", request.DestinationCode);
-        if (!string.IsNullOrEmpty(request.OpsManager))      p.Add("OpsManager",      request.OpsManager);
-        if (!string.IsNullOrEmpty(request.OpsExec))         p.Add("OpsExec",         request.OpsExec);
-        if (!string.IsNullOrEmpty(request.Search))          p.Add("Search",          $"%{request.Search}%");
+        if (request.DateFrom.HasValue)                           p.Add("DateFrom",         request.DateFrom);
+        if (request.DateTo.HasValue)                             p.Add("DateTo",           request.DateTo);
+        if (request.BranchCodeFilter is { Length: > 0 })        p.Add("BranchCodeFilter", request.BranchCodeFilter);
+        else if (!string.IsNullOrEmpty(request.BranchCode))     p.Add("BranchCode",       request.BranchCode);
+        if (!string.IsNullOrEmpty(request.TourGenericCode))     p.Add("TourGenericCode",  request.TourGenericCode);
+        if (!string.IsNullOrEmpty(request.SeriesCode))          p.Add("SeriesCode",       request.SeriesCode);
+        if (!string.IsNullOrEmpty(request.DestinationCode))     p.Add("DestinationCode",  request.DestinationCode);
+        if (!string.IsNullOrEmpty(request.OpsManager))          p.Add("OpsManager",       request.OpsManager);
+        if (!string.IsNullOrEmpty(request.OpsExec))             p.Add("OpsExec",          request.OpsExec);
+        if (!string.IsNullOrEmpty(request.Search))              p.Add("Search",           $"%{request.Search}%");
         return p;
     }
 
@@ -279,6 +310,18 @@ public static class DeparturesEndpoint
         return baseShape;
     }
 
+    private static bool MatchesQuickStatus(List<GroupTaskRow> tasks, int readiness, DateOnly today, string quickStatus) =>
+        quickStatus switch
+        {
+            "overdue"    => tasks.Any(t => t.Status == "overdue"),
+            "at_risk"    => OpsGroupsDbHelper.ComputeRiskLevel(readiness) is "red" or "amber",
+            "ready"      => readiness >= 100,
+            "due_later"  => tasks.Any(t => t.DueDate.HasValue && t.DueDate.Value == today),
+            "done_today" => tasks.Any(t => t.Status == "complete" && t.CompletedDate.HasValue && t.CompletedDate.Value == today),
+            "done_past"  => tasks.Any(t => t.Status == "complete" && t.CompletedDate.HasValue && t.CompletedDate.Value < today),
+            _            => true,
+        };
+
     private static object MapTask(GroupTaskRow t) => new
     {
         group_task_id   = t.GroupTaskId,
@@ -295,20 +338,21 @@ public static class DeparturesEndpoint
     // -------------------------------------------------------------------------
     private sealed record ListRequest : RequestContext
     {
-        public DateOnly? DateFrom        { get; init; }
-        public DateOnly? DateTo          { get; init; }
-        public new string? BranchCode      { get; init; }
-        public string?   TourGenericCode { get; init; }
-        public string?   SeriesCode      { get; init; }
-        public string?   DestinationCode { get; init; }
-        public string?   OpsManager      { get; init; }
-        public string?   OpsExec         { get; init; }
-        public string?   Search          { get; init; }
-        public bool?     IgnoreComplete  { get; init; }
-        public string?   QuickStatus     { get; init; }
-        public string?   Projection      { get; init; }
-        public int?      Page            { get; init; }
-        public int?      PageSize        { get; init; }
+        public DateOnly?   DateFrom         { get; init; }
+        public DateOnly?   DateTo           { get; init; }
+        public new string? BranchCode       { get; init; }
+        public string?     TourGenericCode  { get; init; }
+        public string?     SeriesCode       { get; init; }
+        public string?     DestinationCode  { get; init; }
+        public string?     OpsManager       { get; init; }
+        public string?     OpsExec          { get; init; }
+        public string?     Search           { get; init; }
+        public bool?       IgnoreComplete   { get; init; }
+        public string?     QuickStatus      { get; init; }
+        public string?     Projection       { get; init; }
+        public int?        Page             { get; init; }
+        public int?        PageSize         { get; init; }
+        public string[]?   BranchCodeFilter { get; init; }
     }
 
     private sealed record DetailRequest : RequestContext;

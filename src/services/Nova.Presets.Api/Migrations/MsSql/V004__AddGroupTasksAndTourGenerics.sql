@@ -1,12 +1,12 @@
 -- ============================================================
 -- Nova.Presets.Api — V004
 -- MSSQL dialect
--- Adds: group_task_templates, tour_generics, tenant_user_permissions
+-- Adds: group_tasks, tour_generics, tenant_user_permissions
 -- ============================================================
 
-IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'group_task_templates' AND schema_id = SCHEMA_ID('presets'))
+IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'group_tasks' AND schema_id = SCHEMA_ID('presets'))
 BEGIN
-    CREATE TABLE presets.group_task_templates
+    CREATE TABLE presets.group_tasks
     (
         id                          uniqueidentifier  NOT NULL,
         tenant_id                   varchar(10)       NOT NULL,
@@ -24,23 +24,25 @@ BEGIN
         updated_by                  varchar(10)       NOT NULL,
         updated_on                  datetime2         NOT NULL,
         updated_at                  varchar(50)       NOT NULL,
-        CONSTRAINT pk_group_task_templates PRIMARY KEY (id),
-        CONSTRAINT uq_group_task_templates_code UNIQUE (tenant_id, code)
+        CONSTRAINT pk_group_tasks PRIMARY KEY (id),
+        CONSTRAINT uq_group_tasks_code UNIQUE (tenant_id, code)
     );
 
-    CREATE INDEX ix_group_task_templates_tenant
-        ON presets.group_task_templates (tenant_id, sort_order, code);
+    CREATE INDEX ix_group_tasks_tenant
+        ON presets.group_tasks (tenant_id, sort_order, code);
 END;
 
 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'tour_generics' AND schema_id = SCHEMA_ID('presets'))
 BEGIN
     CREATE TABLE presets.tour_generics
     (
-        id          uniqueidentifier  NOT NULL,
-        tenant_id   varchar(10)       NOT NULL,
-        code        varchar(10)       NOT NULL,
-        name        varchar(200)      NOT NULL,
-        frz_ind     bit               NOT NULL DEFAULT 0,
+        id            uniqueidentifier  NOT NULL,
+        tenant_id     varchar(10)       NOT NULL,
+        code          varchar(10)       NOT NULL,
+        name          varchar(200)      NOT NULL,
+        company_code  varchar(4)        NOT NULL,
+        branch_code   varchar(4)        NOT NULL,
+        frz_ind       bit               NOT NULL DEFAULT 0,
         created_by  varchar(10)       NOT NULL,
         created_on  datetime2         NOT NULL,
         updated_by  varchar(10)       NOT NULL,

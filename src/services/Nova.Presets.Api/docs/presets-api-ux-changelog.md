@@ -192,12 +192,13 @@ The Postman stub used `color`. The API returns `colour` (English UK spelling —
 **Actual response:**
 ```json
 [
-  { "id": "available",     "label": "Available",      "colour": "#22c55e" },
-  { "id": "busy",          "label": "Busy",            "colour": "#ef4444" },
-  { "id": "in-meeting",    "label": "In a Meeting",    "colour": "#f59e0b" },
-  { "id": "out-of-office", "label": "Out of Office",   "colour": "#6b7280" },
-  { "id": "dnd",           "label": "Do Not Disturb",  "colour": "#dc2626" }
+  { "status_code": "available",     "label": "Available",      "colour": "#22c55e" },
+  { "status_code": "busy",          "label": "Busy",            "colour": "#ef4444" },
+  { "status_code": "in-meeting",    "label": "In a Meeting",    "colour": "#f59e0b" },
+  { "status_code": "out-of-office", "label": "Out of Office",   "colour": "#6b7280" },
+  { "status_code": "dnd",           "label": "Do Not Disturb",  "colour": "#dc2626" }
 ]
 ```
 
-Any component binding to `.color` will need to be updated to `.colour`.
+Any component binding to `.color` will need to be updated to `.colour`. Note also that
+the field was renamed from `id` to `status_code` — see item 5.

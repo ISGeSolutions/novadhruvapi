@@ -56,7 +56,8 @@ internal static class ToDoProjections
         CreatedOn:          ToUtcOffset(r.CreatedOn),
         UpdatedBy:          r.UpdatedBy,
         UpdatedOn:          ToUtcOffset(r.UpdatedOn),
-        UpdatedAt:          r.UpdatedAt
+        UpdatedAt:          r.UpdatedAt,
+        LockVer:            r.LockVer
     );
 
     private static DateTimeOffset ToUtcOffset(DateTime dt) =>

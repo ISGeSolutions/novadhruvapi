@@ -21,7 +21,6 @@ using Nova.Shared.Web.RateLimiting;
 using Nova.Shared.Web.Serialisation;
 using Nova.Shared.Web.Tenancy;
 using Nova.Shared.Web.Versioning;
-using Nova.ToDo.Api.Configuration;
 using Nova.ToDo.Api.Endpoints;
 using Nova.ToDo.Api.HealthChecks;
 
@@ -102,11 +101,7 @@ builder.Services.AddNovaCaching();
 // 14. Distributed locking (IDistributedLockService → RedisDistributedLockService)
 builder.Services.AddNovaDistributedLocking();
 
-// 15. Concurrency check settings (hot-reloadable via opsettings.json → ConcurrencyCheck)
-builder.Services.Configure<ConcurrencySettings>(
-    builder.Configuration.GetSection(ConcurrencySettings.SectionName));
-
-// 16. Database migrations (DbUp — per-tenant, safe scripts auto-run)
+// 15. Database migrations (DbUp — per-tenant, safe scripts auto-run)
 builder.AddNovaMigrations();
 
 // 17. Outbox relay (polls nova_outbox per tenant, publishes to RabbitMQ or Redis Streams)

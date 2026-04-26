@@ -94,7 +94,18 @@ INSERT INTO nova_db_table (id, canonical_name, short_alias, legacy_name, descrip
     -- dhruvlog schema (Nova.Shell.Api)
     (13, 'nova_outbox',                     'nox',  NULL, '[dhruvlog] Outbox relay — events pending dispatch to message broker'),
     -- sales97 schema (Nova.ToDo.Api)
-    (14, 'todo',                            'tdo',  'ToDo', '[sales97] Task / to-do items linked to bookings, clients, or tours');
+    (14, 'todo',                            'tdo',  'ToDo', '[sales97] Task / to-do items linked to bookings, clients, or tours'),
+    -- presets schema — group tasks and SLA (Nova.Presets.Api V004/V006, Nova.OpsGroups.Api V001)
+    (15, 'group_tasks',                     'gt',   NULL, '[presets] Tenant-scoped group task template definitions'),
+    (16, 'tour_generics',                   'tgen', NULL, '[presets] Tenant-scoped Tour Generic catalogue'),
+    (17, 'tenant_user_permissions',         'tup2', NULL, '[presets] Per-user permission flags'),
+    (18, 'tour_series',                     'ts',   NULL, '[presets] Tenant-scoped Tour Series catalogue — linked to tour_generics'),
+    (19, 'tour_departures',                 'td',   NULL, '[presets] Operational group-tour departure instances'),
+    (20, 'enquiry_events',                  'ee',   NULL, '[presets] Lookup — SLA reference-date event codes (DP/RT/JI)'),
+    (21, 'sla_task',                        'st',   NULL, '[presets] Normalised SLA cell store — one row per (scope, event, task) where kind=SET or NA; absent row = inherit'),
+    (22, 'sla_task_audit',                  'sta',  NULL, '[presets] Audit trail for every SLA cell change — kind_old/new NULL means inherit'),
+    (23, 'grouptour_departure_group_tasks', 'gdgt', NULL, '[presets] Per-departure task instances generated from group_tasks templates'),
+    (24, 'grouptour_task_business_rules',   'gtbr', NULL, '[presets] Per-tenant/company/branch readiness and risk thresholds');
 
 -- ============================================================
 -- SEED: nova_db_column
@@ -225,7 +236,45 @@ INSERT INTO nova_db_column (id, canonical_name, description) VALUES
 
     -- Canonical name for the legacy MSSQL integer identity PK (SeqNo).
     -- New tables use id uuid. Legacy-mirroring DTOs carry both Guid Id and int SeqNo.
-   (106, 'seq_no',                       'Legacy MSSQL integer identity PK equivalent. New tables use id uuid instead. DTOs for legacy-mirroring tables carry both Guid Id and int SeqNo — only one is populated per dialect.');
+   (106, 'seq_no',                       'Legacy MSSQL integer identity PK equivalent. New tables use id uuid instead. DTOs for legacy-mirroring tables carry both Guid Id and int SeqNo — only one is populated per dialect.'),
+   (107, 'lock_ver',                     'Row-level optimistic locking counter. int NOT NULL DEFAULT 0. Incremented on every write using ConcurrencyHelper.NextVersion(). Use when all columns on a table share a single concurrency domain. For tables with independent update paths use lock_ver_{domain} columns instead — see docs/concurrency-field-group-versioning.md. Named lock_ver (not version) to avoid confusion with business version columns such as VersionNo on cost-versioning tables.'),
+   (108, 'lock_ver_{domain}',            'Field-group optimistic locking counter. int NOT NULL DEFAULT 0. Prefix convention: lock_ver_status, lock_ver_booking, lock_ver_financials etc. The lock_ver_ prefix groups all concurrency columns together in IntelliSense and is distinct from business version columns. Use when different parts of a row are updated independently by different actors or processes. See docs/concurrency-field-group-versioning.md.'),
+
+    -- Common generic identifiers
+   (109, 'code',                          'Short uppercase identifier for a catalogue or reference item (e.g. BHU, NEP, CQ)'),
+   (110, 'name',                          'Human-readable name for a catalogue or reference item'),
+   (111, 'description',                   'Descriptive label for a lookup/reference item'),
+
+    -- Group tasks template columns (presets.group_tasks V004)
+   (112, 'required',                      'Flag — task is mandatory for this scope'),
+   (113, 'critical',                      'Flag — task is critical; breach elevates risk rating'),
+   (114, 'group_task_sla_offset_days',    'SLA offset in days relative to reference_date for a group task template (nullable; NULL = no default SLA)'),
+   (115, 'reference_date',                'SLA reference date code for a group task template (departure | return | ji_exists)'),
+   (116, 'source',                        'Source of the group task template (GLOBAL | TG | TS | TD | CUSTOM)'),
+
+    -- Tour series / tour departures columns (presets.tour_series, presets.tour_departures V006/V001)
+   (117, 'series_code',                   'Short code identifying a tour series (unique per tenant)'),
+   (118, 'series_name',                   'Human-readable name for a tour series'),
+   (119, 'tour_generic_id',               'UUID FK to presets.tour_generics — the Tour Generic this series belongs to'),
+   (120, 'departure_id',                  'Business string identifier for a group-tour departure (e.g. BHUDEL-2026-04-15)'),
+   (121, 'departure_date',                'Calendar date of the departure (date type, no time component)'),
+   (122, 'return_date',                   'Calendar date of the return (date type, nullable)'),
+   (123, 'destination_code',              'Short code for the departure destination'),
+   (124, 'destination_name',              'Human-readable destination name'),
+
+    -- SLA cell store columns (presets.sla_task, presets.sla_task_audit V006)
+   (125, 'scope_type',                    'SLA hierarchy level code: GLOB | TG | TS | TD'),
+   (126, 'scope_id',                      'UUID of the scope entity (polymorphic — no FK constraint; resolved at application layer)'),
+   (127, 'enq_event_code',               'Enquiry event code FK to presets.enquiry_events (DP = Departure Date, RT = Return Date, JI = JI Date)'),
+   (128, 'task_code',                     'Group task template code (matches presets.group_tasks.code)'),
+   (129, 'kind',                          'SLA cell state: SET (explicit offset_days) | NA (not applicable). Absent row = inherit from parent scope.'),
+   (130, 'offset_days',                   'Signed SLA offset in days relative to the enquiry event date. NULL when kind=NA.'),
+   (131, 'kind_old',                      'Audit — kind value before the change. NULL means the cell was previously inherit (no row existed).'),
+   (132, 'offset_days_old',               'Audit — offset_days before the change. NULL when kind_old was NA or inherit.'),
+   (133, 'kind_new',                      'Audit — kind value after the change. NULL means the cell was cleared to inherit (row deleted).'),
+   (134, 'offset_days_new',               'Audit — offset_days after the change. NULL when kind_new is NA or inherit.'),
+   (135, 'changed_by',                    'User id who made the change — used in audit tables'),
+   (136, 'changed_on',                    'UTC timestamp when the audit change occurred (timestamptz)');
 
 -- ============================================================
 -- SEED: nova_db_column_legacy

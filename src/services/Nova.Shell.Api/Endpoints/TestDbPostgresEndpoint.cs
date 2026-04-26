@@ -19,7 +19,7 @@ public static class TestDbPostgresEndpoint
         {
             AppSettings settings = appOptions.Value;
             PostgresDialect dialect = new();
-            string tableRef = dialect.TableRef("sales97", "pointer");
+            string tableRef = dialect.TableRef("presets", "pointer");
 
             try
             {

@@ -1,11 +1,10 @@
 using System.Data;
 using Dapper;
-using Microsoft.Extensions.Options;
 using Nova.Shared.Data;
 using Nova.Shared.Requests;
 using Nova.Shared.Tenancy;
 using Nova.Shared.Validation;
-using Nova.ToDo.Api.Configuration;
+using Nova.ToDo.Api.Models;
 
 namespace Nova.ToDo.Api.Endpoints;
 
@@ -25,13 +24,12 @@ public static class UpdateToDoEndpoint
     }
 
     private static async Task<IResult> HandleAsync(
-        int                                   seqNo,
-        UpdateToDoRequest                     request,
-        TenantContext                         tenantContext,
-        IDbConnectionFactory                  connectionFactory,
-        ISqlDialect                           dialect,
-        IOptionsSnapshot<ConcurrencySettings> concurrencyOptions,
-        CancellationToken                     ct)
+        int                  seqNo,
+        UpdateToDoRequest    request,
+        TenantContext        tenantContext,
+        IDbConnectionFactory connectionFactory,
+        ISqlDialect          dialect,
+        CancellationToken    ct)
     {
         Dictionary<string, string[]> contextErrors = RequestContextValidator.Validate(request);
         if (contextErrors.Count > 0)
@@ -43,9 +41,9 @@ public static class UpdateToDoEndpoint
                 detail:     "tenant_id in the request body does not match the authenticated tenant.",
                 statusCode: StatusCodes.Status403Forbidden);
 
-        if (request.UpdatedOn == default)
+        if (request.ExpectedLockVer is null)
             return TypedResults.ValidationProblem(
-                new Dictionary<string, string[]> { ["updated_on"] = ["updated_on is required for concurrency check."] },
+                new Dictionary<string, string[]> { ["expected_lock_ver"] = ["expected_lock_ver is required for concurrency check."] },
                 title: "Validation failed");
 
         if (request.SendSMSInd == true && string.IsNullOrWhiteSpace(request.SendSMSTo))
@@ -59,48 +57,18 @@ public static class UpdateToDoEndpoint
 
         string todo = dialect.TableRef("sales97", "ToDo");
 
-        // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
-        string fetchSql = $"""
-            SELECT SeqNo, JobCode, TaskDetail, AssignedToUserCode, PriorityCode,
-                   DueDate, DueTime, InFlexibleInd, StartDate, StartTime,
-                   AssignedByUserCode, Remark, EstJobTime,
-                   ClientName, BkgNo, QuoteNo, CampaignCode, Accountcode_Client,
-                   Brochure_Code_Short, DepDate, SupplierCode,
-                   SendEMailToInd, AlertToInd, SendSMSInd, SendSMSTo,
-                   DoneInd, ISNULL(FrzInd, 0) AS frz_ind, UpdatedOn
-            FROM {todo}
-            WHERE SeqNo = @SeqNo
-            """;
-
         using IDbConnection connection = connectionFactory.CreateForTenant(tenantContext);
 
-        CurrentRow? current = await connection.QuerySingleOrDefaultAsync<CurrentRow>(
-            fetchSql, new { SeqNo = seqNo }, commandTimeout: 30);
-
-        if (current is null)
-            return TypedResults.Problem(
-                title:      "Not found",
-                detail:     $"ToDo record with seq_no {seqNo} was not found.",
-                statusCode: StatusCodes.Status404NotFound);
-
-        // Concurrency check
-        ConcurrencySettings concurrency = concurrencyOptions.Value;
-        if (concurrency.StrictMode)
-        {
-            DateTimeOffset dbUpdatedOn = new(DateTime.SpecifyKind(current.UpdatedOn, DateTimeKind.Utc));
-            if (dbUpdatedOn > request.UpdatedOn)
-                return TypedResults.Problem(
-                    title:      "Conflict",
-                    detail:     concurrency.ConflictMessage,
-                    statusCode: StatusCodes.Status409Conflict);
-        }
-
         // Build SET clause from only the fields that were sent (non-null = submitted).
+        int nextVer = ConcurrencyHelper.NextVersion(request.ExpectedLockVer!.Value);
+
         var setClauses = new List<string>();
         var parameters = new DynamicParameters();
-        parameters.Add("SeqNo",     seqNo);
-        parameters.Add("UpdatedBy", request.UserId);
-        parameters.Add("UpdatedAt", request.IpAddress ?? "unknown");
+        parameters.Add("SeqNo",           seqNo);
+        parameters.Add("UpdatedBy",       request.UserId);
+        parameters.Add("UpdatedAt",       request.IpAddress ?? "unknown");
+        parameters.Add("ExpectedLockVer", request.ExpectedLockVer.Value);
+        parameters.Add("NextLockVer",     nextVer);
 
         void TrySet<T>(string col, string paramName, T? value) where T : struct
         {
@@ -153,24 +121,45 @@ public static class UpdateToDoEndpoint
         setClauses.Add("UpdatedBy = @UpdatedBy");
         setClauses.Add("UpdatedOn = GETUTCDATE()");   // TODO (item 3): MSSQL-only — replace per dialect
         setClauses.Add("UpdatedAt = @UpdatedAt");
+        setClauses.Add("lock_ver  = @NextLockVer");
 
-        // TODO (item 3): GETUTCDATE() is MSSQL-only — use NOW() AT TIME ZONE 'UTC' for Postgres, UTC_TIMESTAMP() for MariaDB.
-        // TODO (item 3): For Postgres, use RETURNING updated_on instead of SELECT GETUTCDATE().
         // MSSQL-LEGACY. Review aliases 14 Apr 2026. Reviewed by rajeevjha on 14 Apr 2026.
+        // OUTPUT INSERTED.lock_ver returns null (no rows) on concurrency conflict — atomic check.
+        // TODO (item 3): GETUTCDATE() is MSSQL-only — replace per dialect when porting.
         string updateSql = $"""
             UPDATE {todo}
             SET {string.Join(", ", setClauses)}
-            WHERE SeqNo = @SeqNo;
-            SELECT GETUTCDATE();
+            OUTPUT INSERTED.lock_ver
+            WHERE SeqNo = @SeqNo AND lock_ver = @ExpectedLockVer
             """;
 
-        DateTime newUpdatedOn = await connection.ExecuteScalarAsync<DateTime>(updateSql, parameters, commandTimeout: 30);
-        DateTimeOffset updatedOnOffset = new(DateTime.SpecifyKind(newUpdatedOn, DateTimeKind.Utc));
+        int? newLockVer = await connection.QueryFirstOrDefaultAsync<int?>(
+            updateSql, parameters, commandTimeout: 30);
+
+        if (newLockVer is null)
+        {
+            ToDoRow? current = await ToDoDbHelper.FetchBySeqNoAsync(connection, dialect, seqNo);
+            if (current is null)
+                return TypedResults.Problem(
+                    title:      "Not found",
+                    detail:     $"ToDo record with seq_no {seqNo} was not found.",
+                    statusCode: StatusCodes.Status404NotFound);
+            return TypedResults.Problem(
+                title:      "Conflict",
+                detail:     "Record was updated by someone else. Refresh and try again.",
+                statusCode: StatusCodes.Status409Conflict,
+                extensions: new Dictionary<string, object?>
+                {
+                    ["seq_no"]          = seqNo.ToString(),
+                    ["server_lock_ver"] = current.LockVer,
+                    ["server_row"]      = ToDoProjections.Project(current),
+                });
+        }
 
         return TypedResults.Ok(new
         {
-            seq_no     = seqNo.ToString(),
-            updated_on = updatedOnOffset,
+            seq_no   = seqNo.ToString(),
+            lock_ver = newLockVer.Value,
         });
     }
 
@@ -183,15 +172,9 @@ public static class UpdateToDoEndpoint
         return null;
     }
 
-    private sealed record CurrentRow(
-        int      SeqNo, DateTime UpdatedOn,
-        string   JobCode, string TaskDetail, string AssignedToUserCode,
-        string   PriorityCode, DateTime DueDate, bool InFlexibleInd,
-        string   AssignedByUserCode, bool FrzInd, bool DoneInd);
-
     private sealed record UpdateToDoRequest : RequestContext
     {
-        public DateTimeOffset UpdatedOn { get; init; }
+        public int? ExpectedLockVer { get; init; }
 
         public string?   JobCode            { get; init; }
         public string?   TaskDetail         { get; init; }

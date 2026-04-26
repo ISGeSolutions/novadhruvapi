@@ -61,7 +61,7 @@ public static class TasksEndpoint
 
         PresetsDbSettings presetsDb = presetsDbOptions.Value;
         ISqlDialect       dialect   = PresetsDbHelper.Dialect(presetsDb.DbType);
-        string            table     = dialect.TableRef("presets", "group_task_templates");
+        string            table     = dialect.TableRef("presets", "group_tasks");
         string            falsy     = dialect.BooleanLiteral(false);
         string            truthy    = dialect.BooleanLiteral(true);
 
@@ -82,7 +82,8 @@ public static class TasksEndpoint
                        reference_date               AS ReferenceDate,
                        source                       AS Source,
                        sort_order                   AS SortOrder,
-                       frz_ind                      AS FrzInd
+                       frz_ind                      AS FrzInd,
+                       lock_ver                     AS LockVer
                 FROM   {table}
                 WHERE  tenant_id = @TenantId
                 {frzFilter}
@@ -105,6 +106,7 @@ public static class TasksEndpoint
                 source                     = r.Source,
                 sort_order                 = r.SortOrder,
                 frz_ind                    = r.FrzInd,
+                lock_ver                   = r.LockVer,
             }).ToList(),
         });
     }
@@ -124,6 +126,11 @@ public static class TasksEndpoint
         if (errors.Count > 0)
             return TypedResults.ValidationProblem(errors, title: "Validation failed");
 
+        if (request.ExpectedLockVer is null)
+            return TypedResults.ValidationProblem(
+                new Dictionary<string, string[]> { ["expected_lock_ver"] = ["Required for concurrency check."] },
+                title: "Validation failed");
+
         string? jwtTenantId = httpContext.User.FindFirstValue("tenant_id");
         if (!string.Equals(request.TenantId, jwtTenantId, StringComparison.OrdinalIgnoreCase))
             return TypedResults.Problem(
@@ -135,28 +142,30 @@ public static class TasksEndpoint
 
         var setClauses = new List<string>();
         var p          = new DynamicParameters();
-        p.Add("TenantId", request.TenantId);
-        p.Add("Code",     code);
-        p.Add("Now",      PresetsDbHelper.UtcNow());
-        p.Add("UpdatedBy", request.UserId);
+        p.Add("TenantId",       request.TenantId);
+        p.Add("Code",           code);
+        p.Add("Now",            PresetsDbHelper.UtcNow());
+        p.Add("UpdatedBy",      request.UserId);
+        p.Add("ExpectedLockVer", request.ExpectedLockVer.Value);
 
-        if (request.Name          is not null) { setClauses.Add("name = @Name");                           p.Add("Name",          request.Name); }
-        if (request.Required      is not null) { setClauses.Add("required = @Required");                   p.Add("Required",      request.Required); }
-        if (request.Critical      is not null) { setClauses.Add("critical = @Critical");                   p.Add("Critical",      request.Critical); }
-        if (request.GroupTaskSlaOffsetDays is not null) { setClauses.Add("group_task_sla_offset_days = @SlaOffset"); p.Add("SlaOffset", request.GroupTaskSlaOffsetDays); }
-        if (request.ReferenceDate is not null) { setClauses.Add("reference_date = @ReferenceDate");        p.Add("ReferenceDate", request.ReferenceDate); }
-        if (request.Source        is not null) { setClauses.Add("source = @Source");                       p.Add("Source",        request.Source); }
-        if (request.FrzInd        is not null) { setClauses.Add("frz_ind = @FrzInd");                     p.Add("FrzInd",        request.FrzInd); }
+        if (request.Name          is not null) { setClauses.Add("name = @Name");                                   p.Add("Name",          request.Name); }
+        if (request.Required      is not null) { setClauses.Add("required = @Required");                           p.Add("Required",      request.Required); }
+        if (request.Critical      is not null) { setClauses.Add("critical = @Critical");                           p.Add("Critical",      request.Critical); }
+        if (request.GroupTaskSlaOffsetDays is not null) { setClauses.Add("group_task_sla_offset_days = @SlaOffset"); p.Add("SlaOffset",   request.GroupTaskSlaOffsetDays); }
+        if (request.ReferenceDate is not null) { setClauses.Add("reference_date = @ReferenceDate");                p.Add("ReferenceDate", request.ReferenceDate); }
+        if (request.Source        is not null) { setClauses.Add("source = @Source");                               p.Add("Source",        request.Source); }
+        if (request.FrzInd        is not null) { setClauses.Add("frz_ind = @FrzInd");                             p.Add("FrzInd",        request.FrzInd); }
 
         if (setClauses.Count == 0)
-            return TypedResults.Ok(new { success = true });
+            return TypedResults.Ok(new { success = true, code, lock_ver = request.ExpectedLockVer.Value });
 
+        setClauses.Add("lock_ver   = lock_ver + 1");
         setClauses.Add("updated_on = @Now");
         setClauses.Add("updated_by = @UpdatedBy");
         setClauses.Add("updated_at = 'Nova.Presets.Api'");
 
         ISqlDialect dialect = PresetsDbHelper.Dialect(presetsDb.DbType);
-        string      table   = dialect.TableRef("presets", "group_task_templates");
+        string      table   = dialect.TableRef("presets", "group_tasks");
 
         using (IDbConnection conn = connectionFactory.CreateFromConnectionString(
                    presetsDb.ConnectionString, presetsDb.DbType))
@@ -167,18 +176,46 @@ public static class TasksEndpoint
                 SET    {string.Join(", ", setClauses)}
                 WHERE  tenant_id = @TenantId
                 AND    code      = @Code
+                AND    lock_ver  = @ExpectedLockVer
                 """,
                 p,
                 commandTimeout: 10);
 
             if (affected == 0)
+            {
+                // Distinguish 404 (row gone) from 409 (lock mismatch)
+                TaskRow? current = await conn.QueryFirstOrDefaultAsync<TaskRow>(
+                    $"""
+                    SELECT code AS Code, name AS Name, required AS Required, critical AS Critical,
+                           group_task_sla_offset_days AS GroupTaskSlaOffsetDays,
+                           reference_date AS ReferenceDate, source AS Source,
+                           sort_order AS SortOrder, frz_ind AS FrzInd, lock_ver AS LockVer
+                    FROM   {table}
+                    WHERE  tenant_id = @TenantId AND code = @Code
+                    """,
+                    new { request.TenantId, Code = code },
+                    commandTimeout: 10);
+
+                if (current is null)
+                    return TypedResults.Problem(
+                        title:      "Not found",
+                        detail:     $"No task template with code '{code}' found for this tenant.",
+                        statusCode: StatusCodes.Status404NotFound);
+
                 return TypedResults.Problem(
-                    title:      "Not found",
-                    detail:     $"No task template with code '{code}' found for this tenant.",
-                    statusCode: StatusCodes.Status404NotFound);
+                    title:      "Conflict",
+                    detail:     "This task was modified by another user. Refresh and re-apply your changes.",
+                    statusCode: StatusCodes.Status409Conflict,
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["code"]            = current.Code,
+                        ["server_lock_ver"] = current.LockVer,
+                        ["server_row"]      = ServerRow(current),
+                    });
+            }
         }
 
-        return TypedResults.Ok(new { success = true });
+        return TypedResults.Ok(new { success = true, code, lock_ver = request.ExpectedLockVer.Value + 1 });
     }
 
     // -------------------------------------------------------------------------
@@ -207,7 +244,7 @@ public static class TasksEndpoint
 
         PresetsDbSettings presetsDb = presetsDbOptions.Value;
         ISqlDialect       dialect   = PresetsDbHelper.Dialect(presetsDb.DbType);
-        string            table     = dialect.TableRef("presets", "group_task_templates");
+        string            table     = dialect.TableRef("presets", "group_tasks");
         DateTimeOffset    now       = PresetsDbHelper.UtcNow();
 
         using IDbConnection conn = connectionFactory.CreateFromConnectionString(
@@ -265,6 +302,23 @@ public static class TasksEndpoint
     }
 
     // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+    private static object ServerRow(TaskRow r) => new
+    {
+        code                       = r.Code,
+        name                       = r.Name,
+        required                   = r.Required,
+        critical                   = r.Critical,
+        group_task_sla_offset_days = r.GroupTaskSlaOffsetDays,
+        reference_date             = r.ReferenceDate,
+        source                     = r.Source,
+        sort_order                 = r.SortOrder,
+        frz_ind                    = r.FrzInd,
+        lock_ver                   = r.LockVer,
+    };
+
+    // -------------------------------------------------------------------------
     // DTOs
     // -------------------------------------------------------------------------
     private sealed record TaskRow(
@@ -276,7 +330,8 @@ public static class TasksEndpoint
         string  ReferenceDate,
         string  Source,
         int?    SortOrder,
-        bool    FrzInd);
+        bool    FrzInd,
+        int     LockVer);
 
     private sealed record ListRequest : RequestContext
     {
@@ -292,6 +347,7 @@ public static class TasksEndpoint
         public string? ReferenceDate           { get; set; }
         public string? Source                  { get; set; }
         public bool?   FrzInd                  { get; set; }
+        public int?    ExpectedLockVer         { get; set; }
     }
 
     private sealed record ReorderRequest : RequestContext

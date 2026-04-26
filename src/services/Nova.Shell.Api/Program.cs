@@ -172,6 +172,7 @@ HttpPingEndpoint.Map(v1);       // reference: resilient outbound HttpClient patt
 // Unversioned diagnostic endpoints — registered directly on app (no version check applied)
 TestDbMsSqlEndpoint.Map(app);
 TestDbPostgresEndpoint.Map(app);
+TestDbMariaDbEndpoint.Map(app);
 TestCacheEndpoint.Map(app);
 TestLockEndpoint.Map(app);
 TestInternalAuthEndpoint.Map(app);

@@ -1,18 +1,20 @@
 -- ============================================================
--- Nova.OpsGroups.Api — opsgroups database
+-- Nova.OpsGroups.Api — V001
 -- MariaDB dialect
--- opsgroups is a database. All identifiers use backtick quoting.
+-- All tables live in the presets database (owned by Nova.Presets.Api).
+-- enquiry_events, tour_series, sla_task, sla_task_audit
+-- are in Nova.Presets.Api V006.
 -- Note: MariaDB does not support partial/filtered indexes.
 -- ============================================================
 
-CREATE DATABASE IF NOT EXISTS `opsgroups`
+CREATE DATABASE IF NOT EXISTS `presets`
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
--- grouptour_departures
+-- tour_departures
 -- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `opsgroups`.`grouptour_departures`
+CREATE TABLE IF NOT EXISTS `presets`.`tour_departures`
 (
     `id`                    CHAR(36)       NOT NULL,
     `tenant_id`             VARCHAR(10)    NOT NULL,
@@ -39,22 +41,22 @@ CREATE TABLE IF NOT EXISTS `opsgroups`.`grouptour_departures`
     `updated_on`            DATETIME(6)    NOT NULL,
     `updated_at`            VARCHAR(50)    NOT NULL,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uq_grouptour_departures_id` (`tenant_id`, `departure_id`)
+    UNIQUE KEY `uq_tour_departures_id` (`tenant_id`, `departure_id`)
 ) ENGINE=InnoDB;
 
-CREATE INDEX `ix_grouptour_departures_date`
-    ON `opsgroups`.`grouptour_departures` (`tenant_id`, `departure_date`);
+CREATE INDEX `ix_tour_departures_date`
+    ON `presets`.`tour_departures` (`tenant_id`, `departure_date`);
 
-CREATE INDEX `ix_grouptour_departures_series`
-    ON `opsgroups`.`grouptour_departures` (`tenant_id`, `series_code`);
+CREATE INDEX `ix_tour_departures_series`
+    ON `presets`.`tour_departures` (`tenant_id`, `series_code`);
 
-CREATE INDEX `ix_grouptour_departures_branch`
-    ON `opsgroups`.`grouptour_departures` (`tenant_id`, `branch_code`);
+CREATE INDEX `ix_tour_departures_branch`
+    ON `presets`.`tour_departures` (`tenant_id`, `branch_code`);
 
 -- ------------------------------------------------------------
 -- grouptour_departure_group_tasks
 -- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `opsgroups`.`grouptour_departure_group_tasks`
+CREATE TABLE IF NOT EXISTS `presets`.`grouptour_departure_group_tasks`
 (
     `id`              CHAR(36)       NOT NULL,
     `tenant_id`       VARCHAR(10)    NOT NULL,
@@ -77,59 +79,12 @@ CREATE TABLE IF NOT EXISTS `opsgroups`.`grouptour_departure_group_tasks`
 ) ENGINE=InnoDB;
 
 CREATE INDEX `ix_grouptour_departure_group_tasks_dep`
-    ON `opsgroups`.`grouptour_departure_group_tasks` (`tenant_id`, `departure_id`);
-
--- ------------------------------------------------------------
--- grouptour_sla_rules
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `opsgroups`.`grouptour_sla_rules`
-(
-    `id`                          CHAR(36)      NOT NULL,
-    `tenant_id`                   VARCHAR(10)   NOT NULL,
-    `level`                       VARCHAR(20)   NOT NULL,
-    `scope_key`                   VARCHAR(100)  NOT NULL,
-    `tour_code`                   VARCHAR(20)       NULL,
-    `group_task_code`             VARCHAR(10)   NOT NULL,
-    `reference_date`              VARCHAR(20)   NOT NULL,
-    `group_task_sla_offset_days`  INT               NULL,
-    `version`                     VARCHAR(50)       NULL,
-    `created_by`                  VARCHAR(10)   NOT NULL,
-    `created_on`                  DATETIME(6)   NOT NULL,
-    `updated_by`                  VARCHAR(10)   NOT NULL,
-    `updated_on`                  DATETIME(6)   NOT NULL,
-    `updated_at`                  VARCHAR(50)   NOT NULL,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uq_grouptour_sla_rules` (`tenant_id`, `scope_key`, `group_task_code`, `reference_date`)
-) ENGINE=InnoDB;
-
-CREATE INDEX `ix_grouptour_sla_rules_level`
-    ON `opsgroups`.`grouptour_sla_rules` (`tenant_id`, `level`, `tour_code`);
-
--- ------------------------------------------------------------
--- grouptour_sla_rule_audit
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `opsgroups`.`grouptour_sla_rule_audit`
-(
-    `id`                CHAR(36)      NOT NULL,
-    `tenant_id`         VARCHAR(10)   NOT NULL,
-    `scope_key`         VARCHAR(100)  NOT NULL,
-    `scope_label`       VARCHAR(200)  NOT NULL,
-    `group_task_code`   VARCHAR(10)   NOT NULL,
-    `reference_date`    VARCHAR(20)   NOT NULL,
-    `old_value`         INT               NULL,
-    `new_value`         INT               NULL,
-    `changed_by_name`   VARCHAR(200)  NOT NULL,
-    `changed_at`        DATETIME(6)   NOT NULL,
-    PRIMARY KEY (`id`)
-) ENGINE=InnoDB;
-
-CREATE INDEX `ix_grouptour_sla_rule_audit_scope`
-    ON `opsgroups`.`grouptour_sla_rule_audit` (`tenant_id`, `scope_key`, `changed_at`);
+    ON `presets`.`grouptour_departure_group_tasks` (`tenant_id`, `departure_id`);
 
 -- ------------------------------------------------------------
 -- grouptour_task_business_rules
 -- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `opsgroups`.`grouptour_task_business_rules`
+CREATE TABLE IF NOT EXISTS `presets`.`grouptour_task_business_rules`
 (
     `tenant_id`               VARCHAR(10)   NOT NULL,
     `company_code`            VARCHAR(10)   NOT NULL,

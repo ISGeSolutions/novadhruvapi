@@ -1,18 +1,18 @@
 -- ============================================================
 -- Nova.Presets.Api — V004
 -- Postgres dialect
--- Adds: group_task_templates, tour_generics, tenant_user_permissions
+-- Adds: group_tasks, tour_generics, tenant_user_permissions
 -- ============================================================
 
 -- ------------------------------------------------------------
--- group_task_templates
+-- group_tasks
 -- Tenant-scoped task template definitions.
 -- sort_order: manual ordering (NULLS LAST on read).
 -- frz_ind: soft-delete — excluded from normal reads.
 -- source: GLOBAL | TG | TS | TD | CUSTOM
 -- reference_date: departure | return | ji_exists
 -- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS presets.group_task_templates
+CREATE TABLE IF NOT EXISTS presets.group_tasks
 (
     id                          uuid            NOT NULL,
     tenant_id                   varchar(10)     NOT NULL,
@@ -30,12 +30,12 @@ CREATE TABLE IF NOT EXISTS presets.group_task_templates
     updated_by                  varchar(10)     NOT NULL,
     updated_on                  timestamptz     NOT NULL,
     updated_at                  varchar(50)     NOT NULL,
-    CONSTRAINT pk_group_task_templates PRIMARY KEY (id),
-    CONSTRAINT uq_group_task_templates_code UNIQUE (tenant_id, code)
+    CONSTRAINT pk_group_tasks PRIMARY KEY (id),
+    CONSTRAINT uq_group_tasks_code UNIQUE (tenant_id, code)
 );
 
-CREATE INDEX IF NOT EXISTS ix_group_task_templates_tenant
-    ON presets.group_task_templates (tenant_id, sort_order NULLS LAST, code);
+CREATE INDEX IF NOT EXISTS ix_group_tasks_tenant
+    ON presets.group_tasks (tenant_id, sort_order NULLS LAST, code);
 
 -- ------------------------------------------------------------
 -- tour_generics
@@ -44,16 +44,18 @@ CREATE INDEX IF NOT EXISTS ix_group_task_templates_tenant
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS presets.tour_generics
 (
-    id          uuid            NOT NULL,
-    tenant_id   varchar(10)     NOT NULL,
-    code        varchar(10)     NOT NULL,
-    name        varchar(200)    NOT NULL,
-    frz_ind     boolean         NOT NULL DEFAULT false,
-    created_by  varchar(10)     NOT NULL,
-    created_on  timestamptz     NOT NULL,
-    updated_by  varchar(10)     NOT NULL,
-    updated_on  timestamptz     NOT NULL,
-    updated_at  varchar(50)     NOT NULL,
+    id            uuid            NOT NULL,
+    tenant_id     varchar(10)     NOT NULL,
+    code          varchar(10)     NOT NULL,
+    name          varchar(200)    NOT NULL,
+    company_code  varchar(4)      NOT NULL,
+    branch_code   varchar(4)      NOT NULL,
+    frz_ind       boolean         NOT NULL DEFAULT false,
+    created_by    varchar(10)     NOT NULL,
+    created_on    timestamptz     NOT NULL,
+    updated_by    varchar(10)     NOT NULL,
+    updated_on    timestamptz     NOT NULL,
+    updated_at    varchar(50)     NOT NULL,
     CONSTRAINT pk_tour_generics PRIMARY KEY (id),
     CONSTRAINT uq_tour_generics_code UNIQUE (tenant_id, code)
 );

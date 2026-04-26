@@ -48,5 +48,6 @@ internal sealed record ToDoDetail(
     DateTimeOffset  CreatedOn,           // wire: "2026-01-10T08:30:00Z"
     string          UpdatedBy,
     DateTimeOffset  UpdatedOn,           // wire: "2026-04-03T14:22:00Z"
-    string          UpdatedAt            // client IP, wire: "192.168.1.100"
+    string          UpdatedAt,           // client IP, wire: "192.168.1.100"
+    int             LockVer              // optimistic concurrency token — send back on every write
 );

@@ -43,29 +43,48 @@ internal static class OpsGroupsDbHelper
     // Departures
     // -------------------------------------------------------------------------
 
-    internal static string DeparturesListSql(OpsGroupsDbSettings db, DepartureFilters f, int skip, int take)
+    // Builds shared WHERE predicates for all departure queries.
+    // BranchCodeFilter (array) takes precedence over single BranchCode.
+    // TourGenericCode requires a series→generic subquery since tour_departures has no tg column.
+    private static List<string> DepartureWhereFilters(DepartureFilters f, ISqlDialect dialect)
     {
-        ISqlDialect dialect  = Dialect(db.DbType);
-        string      table    = dialect.TableRef("opsgroups", "grouptour_departures");
-        string      falsy    = dialect.BooleanLiteral(false);
-        string      paging   = dialect.OffsetFetchClause(skip, take);
-
+        string falsy = dialect.BooleanLiteral(false);
         var where = new List<string>
         {
             "d.tenant_id = @TenantId",
             $"d.frz_ind  = {falsy}",
         };
 
-        if (f.DateFrom.HasValue)     where.Add("d.departure_date >= @DateFrom");
-        if (f.DateTo.HasValue)       where.Add("d.departure_date <= @DateTo");
-        if (!string.IsNullOrEmpty(f.BranchCode))        where.Add("d.branch_code = @BranchCode");
-        if (!string.IsNullOrEmpty(f.SeriesCode))        where.Add("d.series_code = @SeriesCode");
-        if (!string.IsNullOrEmpty(f.DestinationCode))   where.Add("d.destination_code = @DestinationCode");
-        if (!string.IsNullOrEmpty(f.OpsManager))        where.Add("d.ops_manager_initials = @OpsManager");
-        if (!string.IsNullOrEmpty(f.OpsExec))           where.Add("d.ops_exec_initials = @OpsExec");
-        if (!string.IsNullOrEmpty(f.Search))            where.Add("(d.series_name LIKE @Search OR d.destination_name LIKE @Search OR d.departure_id LIKE @Search)");
+        if (f.DateFrom.HasValue)   where.Add("d.departure_date >= @DateFrom");
+        if (f.DateTo.HasValue)     where.Add("d.departure_date <= @DateTo");
 
-        string whereClause = string.Join(" AND ", where);
+        if (f.BranchCodeFilter is { Length: > 0 })
+            where.Add("d.branch_code IN @BranchCodeFilter");
+        else if (!string.IsNullOrEmpty(f.BranchCode))
+            where.Add("d.branch_code = @BranchCode");
+
+        if (!string.IsNullOrEmpty(f.SeriesCode))      where.Add("d.series_code = @SeriesCode");
+        if (!string.IsNullOrEmpty(f.DestinationCode)) where.Add("d.destination_code = @DestinationCode");
+        if (!string.IsNullOrEmpty(f.OpsManager))      where.Add("d.ops_manager_initials = @OpsManager");
+        if (!string.IsNullOrEmpty(f.OpsExec))         where.Add("d.ops_exec_initials = @OpsExec");
+        if (!string.IsNullOrEmpty(f.Search))          where.Add("(d.series_name LIKE @Search OR d.destination_name LIKE @Search OR d.departure_id LIKE @Search)");
+
+        if (!string.IsNullOrEmpty(f.TourGenericCode))
+        {
+            string ts = dialect.TableRef("presets", "tour_series");
+            string tg = dialect.TableRef("presets", "tour_generics");
+            where.Add($"d.series_code IN (SELECT s.series_code FROM {ts} s JOIN {tg} g ON g.id = s.tour_generic_id AND g.tenant_id = s.tenant_id WHERE s.tenant_id = @TenantId AND g.code = @TourGenericCode)");
+        }
+
+        return where;
+    }
+
+    internal static string DeparturesListSql(OpsGroupsDbSettings db, DepartureFilters f, int skip, int take)
+    {
+        ISqlDialect dialect = Dialect(db.DbType);
+        string      table   = dialect.TableRef("presets", "tour_departures");
+        string      paging  = dialect.OffsetFetchClause(skip, take);
+        string      where   = string.Join(" AND ", DepartureWhereFilters(f, dialect));
 
         return $"""
                 SELECT  d.id,
@@ -88,7 +107,7 @@ internal static class OpsGroupsDbHelper
                         d.notes,
                         d.updated_on
                 FROM    {table} d
-                WHERE   {whereClause}
+                WHERE   {where}
                 ORDER BY d.departure_date, d.departure_id
                 {paging}
                 """;
@@ -97,35 +116,16 @@ internal static class OpsGroupsDbHelper
     internal static string DeparturesCountSql(OpsGroupsDbSettings db, DepartureFilters f)
     {
         ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_departures");
-        string      falsy   = dialect.BooleanLiteral(false);
+        string      table   = dialect.TableRef("presets", "tour_departures");
+        string      where   = string.Join(" AND ", DepartureWhereFilters(f, dialect));
 
-        var where = new List<string>
-        {
-            "d.tenant_id = @TenantId",
-            $"d.frz_ind  = {falsy}",
-        };
-
-        if (f.DateFrom.HasValue)     where.Add("d.departure_date >= @DateFrom");
-        if (f.DateTo.HasValue)       where.Add("d.departure_date <= @DateTo");
-        if (!string.IsNullOrEmpty(f.BranchCode))        where.Add("d.branch_code = @BranchCode");
-        if (!string.IsNullOrEmpty(f.SeriesCode))        where.Add("d.series_code = @SeriesCode");
-        if (!string.IsNullOrEmpty(f.DestinationCode))   where.Add("d.destination_code = @DestinationCode");
-        if (!string.IsNullOrEmpty(f.OpsManager))        where.Add("d.ops_manager_initials = @OpsManager");
-        if (!string.IsNullOrEmpty(f.OpsExec))           where.Add("d.ops_exec_initials = @OpsExec");
-        if (!string.IsNullOrEmpty(f.Search))            where.Add("(d.series_name LIKE @Search OR d.destination_name LIKE @Search OR d.departure_id LIKE @Search)");
-
-        string whereClause = string.Join(" AND ", where);
-
-        return $"""
-                SELECT COUNT(*) FROM {table} d WHERE {whereClause}
-                """;
+        return $"SELECT COUNT(*) FROM {table} d WHERE {where}";
     }
 
     internal static string DepartureByIdSql(OpsGroupsDbSettings db)
     {
         ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_departures");
+        string      table   = dialect.TableRef("presets", "tour_departures");
         string      falsy   = dialect.BooleanLiteral(false);
 
         return $"""
@@ -158,7 +158,7 @@ internal static class OpsGroupsDbHelper
     internal static string GroupTasksByDepartureIdsSql(OpsGroupsDbSettings db)
     {
         ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_departure_group_tasks");
+        string      table   = dialect.TableRef("presets", "grouptour_departure_group_tasks");
         string      falsy   = dialect.BooleanLiteral(false);
 
         return $"""
@@ -171,6 +171,7 @@ internal static class OpsGroupsDbHelper
                         t.notes,
                         t.source,
                         t.required,
+                        t.lock_ver,
                         t.updated_on
                 FROM    {table} t
                 WHERE   t.tenant_id    = @TenantId
@@ -187,7 +188,7 @@ internal static class OpsGroupsDbHelper
     internal static string GroupTaskUpdateSql(OpsGroupsDbSettings db)
     {
         ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_departure_group_tasks");
+        string      table   = dialect.TableRef("presets", "grouptour_departure_group_tasks");
 
         return $"""
                 UPDATE {table}
@@ -196,17 +197,19 @@ internal static class OpsGroupsDbHelper
                        completed_date = @CompletedDate,
                        updated_on     = @Now,
                        updated_by     = @UpdatedBy,
-                       updated_at     = 'Nova.OpsGroups.Api'
+                       updated_at     = 'Nova.OpsGroups.Api',
+                       lock_ver       = lock_ver + 1
                 WHERE  tenant_id      = @TenantId
                 AND    departure_id   = @DepartureId
                 AND    group_task_id  = @GroupTaskId
+                AND    lock_ver       = @ExpectedLockVer
                 """;
     }
 
     internal static string GroupTaskByIdSql(OpsGroupsDbSettings db)
     {
         ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_departure_group_tasks");
+        string      table   = dialect.TableRef("presets", "grouptour_departure_group_tasks");
         string      falsy   = dialect.BooleanLiteral(false);
 
         return $"""
@@ -218,6 +221,7 @@ internal static class OpsGroupsDbHelper
                         completed_date,
                         notes,
                         source,
+                        lock_ver,
                         updated_on
                 FROM    {table}
                 WHERE   tenant_id     = @TenantId
@@ -227,206 +231,278 @@ internal static class OpsGroupsDbHelper
                 """;
     }
 
-    internal static string GroupTaskCurrentStatusSql(OpsGroupsDbSettings db)
+    internal static string GroupTaskConditionalUpdateSql(OpsGroupsDbSettings db)
     {
         ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_departure_group_tasks");
+        string      table   = dialect.TableRef("presets", "grouptour_departure_group_tasks");
+
+        return $"""
+                UPDATE {table}
+                SET    status         = @Status,
+                       notes          = @Notes,
+                       completed_date = @CompletedDate,
+                       updated_on     = @Now,
+                       updated_by     = @UpdatedBy,
+                       updated_at     = 'Nova.OpsGroups.Api',
+                       lock_ver       = lock_ver + 1
+                WHERE  tenant_id      = @TenantId
+                AND    departure_id   = @DepartureId
+                AND    group_task_id  = @GroupTaskId
+                AND    lock_ver       = @ExpectedLockVer
+                """;
+    }
+
+    internal static string GroupTaskExistsSql(OpsGroupsDbSettings db)
+    {
+        ISqlDialect dialect = Dialect(db.DbType);
+        string      table   = dialect.TableRef("presets", "grouptour_departure_group_tasks");
         string      falsy   = dialect.BooleanLiteral(false);
 
         return $"""
-                SELECT  departure_id,
-                        group_task_id,
-                        status
-                FROM    {table}
-                WHERE   tenant_id     = @TenantId
-                AND     departure_id  = @DepartureId
-                AND     group_task_id = @GroupTaskId
-                AND     frz_ind       = {falsy}
+                SELECT CASE WHEN EXISTS (
+                    SELECT 1 FROM {table}
+                    WHERE  tenant_id     = @TenantId
+                    AND    departure_id  = @DepartureId
+                    AND    group_task_id = @GroupTaskId
+                    AND    frz_ind       = {falsy}
+                ) THEN 1 ELSE 0 END
                 """;
     }
 
     // -------------------------------------------------------------------------
-    // SLA rules
+    // SLA scope resolution
     // -------------------------------------------------------------------------
 
-    internal static string SlaRulesListSql(OpsGroupsDbSettings db)
+    internal static string ResolveGlobalScopeSql(DbType dbType)
     {
-        ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_sla_rules");
+        ISqlDialect dialect = Dialect(dbType);
+        string      tg      = dialect.TableRef("presets", "tour_generics");
+        return $"SELECT id AS GlobId FROM {tg} WHERE tenant_id = @TenantId AND code = 'GLOBAL'";
+    }
 
+    internal static string ResolveTourGenericScopeSql(DbType dbType)
+    {
+        ISqlDialect dialect = Dialect(dbType);
+        string      tg      = dialect.TableRef("presets", "tour_generics");
         return $"""
-                SELECT  id,
-                        level,
-                        scope_key,
-                        tour_code,
-                        group_task_code,
-                        reference_date,
-                        group_task_sla_offset_days,
-                        version,
-                        updated_on
-                FROM    {table}
-                WHERE   tenant_id = @TenantId
-                ORDER BY level, group_task_code, reference_date
+                SELECT tg.id AS TgId, glob.id AS GlobId
+                FROM   {tg} tg
+                JOIN   {tg} glob ON glob.tenant_id = tg.tenant_id AND glob.code = 'GLOBAL'
+                WHERE  tg.tenant_id = @TenantId AND tg.code = @TourGenericCode
                 """;
     }
 
-    internal static string SlaRuleUpsertSql(OpsGroupsDbSettings db)
+    internal static string ResolveTourSeriesScopeSql(DbType dbType)
     {
-        ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_sla_rules");
+        ISqlDialect dialect = Dialect(dbType);
+        string      ts      = dialect.TableRef("presets", "tour_series");
+        string      tg      = dialect.TableRef("presets", "tour_generics");
+        return $"""
+                SELECT ts.id AS TsId, ts.tour_generic_id AS TgId, glob.id AS GlobId
+                FROM   {ts} ts
+                JOIN   {tg} glob ON glob.tenant_id = ts.tenant_id AND glob.code = 'GLOBAL'
+                WHERE  ts.tenant_id = @TenantId AND ts.series_code = @SeriesCode
+                """;
+    }
 
-        return db.DbType switch
+    internal static string ResolveTourDepartureScopeSql(DbType dbType)
+    {
+        ISqlDialect dialect = Dialect(dbType);
+        string      td      = dialect.TableRef("presets", "tour_departures");
+        string      ts      = dialect.TableRef("presets", "tour_series");
+        string      tg      = dialect.TableRef("presets", "tour_generics");
+        return $"""
+                SELECT td.id AS TdId, ts.id AS TsId, ts.tour_generic_id AS TgId, glob.id AS GlobId
+                FROM   {td} td
+                JOIN   {ts} ts   ON ts.tenant_id  = td.tenant_id AND ts.series_code = td.series_code
+                JOIN   {tg} glob ON glob.tenant_id = td.tenant_id AND glob.code = 'GLOBAL'
+                WHERE  td.tenant_id = @TenantId AND td.departure_id = @DepartureId
+                """;
+    }
+
+    // -------------------------------------------------------------------------
+    // SLA task (normalised cell store)
+    // -------------------------------------------------------------------------
+
+    internal static string SlaTaskFetchForScopesSql(DbType dbType)
+    {
+        ISqlDialect dialect = Dialect(dbType);
+        string      table   = dialect.TableRef("presets", "sla_task");
+        return $"""
+                SELECT id, tenant_id, scope_type, scope_id, enq_event_code, task_code,
+                       kind, offset_days, updated_by, updated_on
+                FROM   {table}
+                WHERE  tenant_id = @TenantId AND scope_id IN @ScopeIds
+                """;
+    }
+
+    internal static string SlaTaskUpsertSql(DbType dbType)
+    {
+        ISqlDialect dialect = Dialect(dbType);
+        string      table   = dialect.TableRef("presets", "sla_task");
+
+        return dbType switch
         {
             DbType.MsSql => $"""
                              MERGE INTO {table} WITH (HOLDLOCK) AS target
-                             USING (SELECT @TenantId AS tenant_id, @ScopeKey AS scope_key,
-                                          @GroupTaskCode AS group_task_code, @ReferenceDate AS reference_date) AS source
-                                   ON target.tenant_id       = source.tenant_id
-                                  AND target.scope_key       = source.scope_key
-                                  AND target.group_task_code = source.group_task_code
-                                  AND target.reference_date  = source.reference_date
+                             USING (SELECT @TenantId AS tenant_id, @ScopeType AS scope_type,
+                                          @ScopeId AS scope_id, @EnqEventCode AS enq_event_code,
+                                          @TaskCode AS task_code) AS source
+                                   ON target.tenant_id      = source.tenant_id
+                                  AND target.scope_type     = source.scope_type
+                                  AND target.scope_id       = source.scope_id
+                                  AND target.enq_event_code = source.enq_event_code
+                                  AND target.task_code      = source.task_code
                              WHEN MATCHED THEN
-                                 UPDATE SET level                       = @Level,
-                                            tour_code                   = @TourCode,
-                                            group_task_sla_offset_days  = @OffsetDays,
-                                            version                     = @Version,
-                                            updated_on                  = @Now,
-                                            updated_by                  = @UpdatedBy,
-                                            updated_at                  = 'Nova.OpsGroups.Api'
+                                 UPDATE SET kind        = @Kind,
+                                            offset_days = @OffsetDays,
+                                            updated_by  = @UpdatedBy,
+                                            updated_on  = @Now
                              WHEN NOT MATCHED THEN
-                                 INSERT (id, tenant_id, level, scope_key, tour_code, group_task_code,
-                                         reference_date, group_task_sla_offset_days, version,
-                                         created_by, created_on, updated_by, updated_on, updated_at)
-                                 VALUES (@Id, @TenantId, @Level, @ScopeKey, @TourCode, @GroupTaskCode,
-                                         @ReferenceDate, @OffsetDays, @Version,
-                                         @UpdatedBy, @Now, @UpdatedBy, @Now, 'Nova.OpsGroups.Api');
+                                 INSERT (id, tenant_id, scope_type, scope_id, enq_event_code,
+                                         task_code, kind, offset_days, updated_by, updated_on)
+                                 VALUES (@Id, @TenantId, @ScopeType, @ScopeId, @EnqEventCode,
+                                         @TaskCode, @Kind, @OffsetDays, @UpdatedBy, @Now);
                              """,
 
             DbType.Postgres => $"""
                                 INSERT INTO {table}
-                                    (id, tenant_id, level, scope_key, tour_code, group_task_code,
-                                     reference_date, group_task_sla_offset_days, version,
-                                     created_by, created_on, updated_by, updated_on, updated_at)
+                                    (id, tenant_id, scope_type, scope_id, enq_event_code,
+                                     task_code, kind, offset_days, updated_by, updated_on)
                                 VALUES
-                                    (@Id, @TenantId, @Level, @ScopeKey, @TourCode, @GroupTaskCode,
-                                     @ReferenceDate, @OffsetDays, @Version,
-                                     @UpdatedBy, @Now, @UpdatedBy, @Now, 'Nova.OpsGroups.Api')
-                                ON CONFLICT (tenant_id, scope_key, group_task_code, reference_date) DO UPDATE SET
-                                    level                      = EXCLUDED.level,
-                                    tour_code                  = EXCLUDED.tour_code,
-                                    group_task_sla_offset_days = EXCLUDED.group_task_sla_offset_days,
-                                    version                    = EXCLUDED.version,
-                                    updated_on                 = EXCLUDED.updated_on,
-                                    updated_by                 = EXCLUDED.updated_by,
-                                    updated_at                 = EXCLUDED.updated_at
+                                    (@Id, @TenantId, @ScopeType, @ScopeId, @EnqEventCode,
+                                     @TaskCode, @Kind, @OffsetDays, @UpdatedBy, @Now)
+                                ON CONFLICT (tenant_id, scope_type, scope_id, enq_event_code, task_code) DO UPDATE SET
+                                    kind        = EXCLUDED.kind,
+                                    offset_days = EXCLUDED.offset_days,
+                                    updated_by  = EXCLUDED.updated_by,
+                                    updated_on  = EXCLUDED.updated_on
                                 """,
 
             _ /* MariaDB */ => $"""
                                 INSERT INTO {table}
-                                    (`id`, `tenant_id`, `level`, `scope_key`, `tour_code`, `group_task_code`,
-                                     `reference_date`, `group_task_sla_offset_days`, `version`,
-                                     `created_by`, `created_on`, `updated_by`, `updated_on`, `updated_at`)
+                                    (`id`, `tenant_id`, `scope_type`, `scope_id`, `enq_event_code`,
+                                     `task_code`, `kind`, `offset_days`, `updated_by`, `updated_on`)
                                 VALUES
-                                    (@Id, @TenantId, @Level, @ScopeKey, @TourCode, @GroupTaskCode,
-                                     @ReferenceDate, @OffsetDays, @Version,
-                                     @UpdatedBy, @Now, @UpdatedBy, @Now, 'Nova.OpsGroups.Api')
+                                    (@Id, @TenantId, @ScopeType, @ScopeId, @EnqEventCode,
+                                     @TaskCode, @Kind, @OffsetDays, @UpdatedBy, @Now)
                                 ON DUPLICATE KEY UPDATE
-                                    `level`                      = VALUES(`level`),
-                                    `tour_code`                  = VALUES(`tour_code`),
-                                    `group_task_sla_offset_days` = VALUES(`group_task_sla_offset_days`),
-                                    `version`                    = VALUES(`version`),
-                                    `updated_on`                 = VALUES(`updated_on`),
-                                    `updated_by`                 = VALUES(`updated_by`),
-                                    `updated_at`                 = VALUES(`updated_at`)
+                                    `kind`        = VALUES(`kind`),
+                                    `offset_days` = VALUES(`offset_days`),
+                                    `updated_by`  = VALUES(`updated_by`),
+                                    `updated_on`  = VALUES(`updated_on`)
                                 """
         };
     }
 
-    // -------------------------------------------------------------------------
-    // SLA hierarchy
-    // -------------------------------------------------------------------------
-
-    internal static string SlaRulesForTenantSql(OpsGroupsDbSettings db)
+    internal static string SlaTaskDeleteSql(DbType dbType)
     {
-        ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_sla_rules");
-
-        return $"""
-                SELECT  id,
-                        level,
-                        scope_key,
-                        tour_code,
-                        group_task_code,
-                        reference_date,
-                        group_task_sla_offset_days,
-                        version,
-                        updated_on
-                FROM    {table}
-                WHERE   tenant_id = @TenantId
-                ORDER BY level, scope_key, group_task_code, reference_date
-                """;
-    }
-
-    internal static string SlaRuleDeleteSql(OpsGroupsDbSettings db)
-    {
-        ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_sla_rules");
-
+        ISqlDialect dialect = Dialect(dbType);
+        string      table   = dialect.TableRef("presets", "sla_task");
         return $"""
                 DELETE FROM {table}
-                WHERE   tenant_id       = @TenantId
-                AND     scope_key       = @ScopeKey
-                AND     group_task_code = @GroupTaskCode
-                AND     reference_date  = @ReferenceDate
+                WHERE  tenant_id      = @TenantId
+                AND    scope_type     = @ScopeType
+                AND    scope_id       = @ScopeId
+                AND    enq_event_code = @EnqEventCode
+                AND    task_code      = @TaskCode
                 """;
     }
 
-    internal static string SlaAuditInsertSql(OpsGroupsDbSettings db)
+    internal static string SlaTaskAuditInsertSql(DbType dbType)
     {
-        ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_sla_rule_audit");
-
+        ISqlDialect dialect = Dialect(dbType);
+        string      table   = dialect.TableRef("presets", "sla_task_audit");
         return $"""
                 INSERT INTO {table}
-                    (id, tenant_id, scope_key, scope_label, group_task_code, reference_date,
-                     old_value, new_value, changed_by_name, changed_at)
+                    (id, tenant_id, scope_type, scope_id, enq_event_code, task_code,
+                     kind_old, offset_days_old, kind_new, offset_days_new, changed_by, changed_on)
                 VALUES
-                    (@Id, @TenantId, @ScopeKey, @ScopeLabel, @GroupTaskCode, @ReferenceDate,
-                     @OldValue, @NewValue, @ChangedByName, @ChangedAt)
+                    (@Id, @TenantId, @ScopeType, @ScopeId, @EnqEventCode, @TaskCode,
+                     @KindOld, @OffsetDaysOld, @KindNew, @OffsetDaysNew, @ChangedBy, @Now)
                 """;
     }
 
-    internal static string SlaAuditQuerySql(OpsGroupsDbSettings db)
+    internal static string SlaTaskAuditFetchSql(DbType dbType, int skip, int take)
     {
-        ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_sla_rule_audit");
-
+        ISqlDialect dialect = Dialect(dbType);
+        string      table   = dialect.TableRef("presets", "sla_task_audit");
+        string      paging  = dialect.OffsetFetchClause(skip, take);
         return $"""
-                SELECT  id,
-                        scope_key,
-                        scope_label,
-                        group_task_code,
-                        reference_date,
-                        old_value,
-                        new_value,
-                        changed_by_name,
-                        changed_at
-                FROM    {table}
-                WHERE   tenant_id = @TenantId
-                AND     scope_key = @ScopeKey
-                ORDER BY changed_at DESC
+                SELECT id, scope_type, scope_id, enq_event_code, task_code,
+                       kind_old, offset_days_old, kind_new, offset_days_new, changed_by, changed_on
+                FROM   {table}
+                WHERE  tenant_id = @TenantId AND scope_id = @ScopeId
+                ORDER BY changed_on DESC
+                {paging}
                 """;
     }
 
-    internal static string SlaAuditCountSql(OpsGroupsDbSettings db)
+    internal static string SlaTaskAuditCountSql(DbType dbType)
     {
-        ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_sla_rule_audit");
+        ISqlDialect dialect = Dialect(dbType);
+        string      table   = dialect.TableRef("presets", "sla_task_audit");
+        return $"SELECT COUNT(*) FROM {table} WHERE tenant_id = @TenantId AND scope_id = @ScopeId";
+    }
 
+    internal static string EnquiryEventsSql(DbType dbType)
+    {
+        ISqlDialect dialect = Dialect(dbType);
+        string      table   = dialect.TableRef("presets", "enquiry_events");
+        return $"SELECT code, description, sort_order FROM {table} ORDER BY sort_order";
+    }
+
+    // -------------------------------------------------------------------------
+    // SLA hierarchy tree — TG + series + departure fetches
+    // -------------------------------------------------------------------------
+
+    internal static string FetchTourGenericWithGlobSql(DbType dbType)
+    {
+        ISqlDialect dialect = Dialect(dbType);
+        string      tg      = dialect.TableRef("presets", "tour_generics");
         return $"""
-                SELECT COUNT(*) FROM {table}
-                WHERE  tenant_id = @TenantId
-                AND    scope_key = @ScopeKey
+                SELECT tg.id AS TgId, tg.code AS Code, tg.name AS Name, glob.id AS GlobId
+                FROM   {tg} tg
+                JOIN   {tg} glob ON glob.tenant_id = tg.tenant_id AND glob.code = 'GLOBAL'
+                WHERE  tg.tenant_id = @TenantId AND tg.code = @TourGenericCode
+                """;
+    }
+
+    internal static string FetchGlobalInfoSql(DbType dbType)
+    {
+        ISqlDialect dialect = Dialect(dbType);
+        string      tg      = dialect.TableRef("presets", "tour_generics");
+        return $"SELECT id AS GlobId, name AS Name FROM {tg} WHERE tenant_id = @TenantId AND code = 'GLOBAL'";
+    }
+
+    internal static string FetchSeriesForTgSql(DbType dbType)
+    {
+        ISqlDialect dialect = Dialect(dbType);
+        string      ts      = dialect.TableRef("presets", "tour_series");
+        string      falsy   = dialect.BooleanLiteral(false);
+        return $"""
+                SELECT id AS Id, series_code AS SeriesCode, series_name AS SeriesName
+                FROM   {ts}
+                WHERE  tenant_id = @TenantId AND tour_generic_id = @TgId AND frz_ind = {falsy}
+                ORDER  BY series_code
+                """;
+    }
+
+    internal static string FetchDeparturesForTgSql(DbType dbType)
+    {
+        ISqlDialect dialect = Dialect(dbType);
+        string      td      = dialect.TableRef("presets", "tour_departures");
+        string      ts      = dialect.TableRef("presets", "tour_series");
+        string      falsy   = dialect.BooleanLiteral(false);
+        return $"""
+                SELECT td.id AS Id, ts.id AS TsId, td.series_code AS SeriesCode, td.departure_date AS DepartureDate
+                FROM   {td} td
+                JOIN   {ts} ts ON ts.tenant_id = td.tenant_id AND ts.series_code = td.series_code
+                WHERE  ts.tenant_id      = @TenantId
+                AND    ts.tour_generic_id = @TgId
+                AND    td.departure_date >= @YearFloorDate
+                AND    td.frz_ind         = {falsy}
+                ORDER  BY td.departure_date, td.series_code
                 """;
     }
 
@@ -437,7 +513,7 @@ internal static class OpsGroupsDbHelper
     internal static string BusinessRulesFetchSql(OpsGroupsDbSettings db)
     {
         ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_task_business_rules");
+        string      table   = dialect.TableRef("presets", "grouptour_task_business_rules");
 
         return $"""
                 SELECT  tenant_id,
@@ -465,7 +541,7 @@ internal static class OpsGroupsDbHelper
     internal static string BusinessRulesUpsertSql(OpsGroupsDbSettings db)
     {
         ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_task_business_rules");
+        string      table   = dialect.TableRef("presets", "grouptour_task_business_rules");
 
         return db.DbType switch
         {
@@ -566,8 +642,8 @@ internal static class OpsGroupsDbHelper
     internal static string SummaryStatsSql(OpsGroupsDbSettings db)
     {
         ISqlDialect dialect  = Dialect(db.DbType);
-        string      depTable = dialect.TableRef("opsgroups", "grouptour_departures");
-        string      taskTable = dialect.TableRef("opsgroups", "grouptour_departure_group_tasks");
+        string      depTable = dialect.TableRef("presets", "tour_departures");
+        string      taskTable = dialect.TableRef("presets", "grouptour_departure_group_tasks");
         string      falsy    = dialect.BooleanLiteral(false);
 
         return $"""
@@ -601,25 +677,8 @@ internal static class OpsGroupsDbHelper
     internal static string FacetsSql(OpsGroupsDbSettings db, DepartureFilters f)
     {
         ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_departures");
-        string      falsy   = dialect.BooleanLiteral(false);
-
-        var where = new List<string>
-        {
-            "d.tenant_id = @TenantId",
-            $"d.frz_ind  = {falsy}",
-        };
-
-        if (f.DateFrom.HasValue)     where.Add("d.departure_date >= @DateFrom");
-        if (f.DateTo.HasValue)       where.Add("d.departure_date <= @DateTo");
-        if (!string.IsNullOrEmpty(f.BranchCode))        where.Add("d.branch_code = @BranchCode");
-        if (!string.IsNullOrEmpty(f.SeriesCode))        where.Add("d.series_code = @SeriesCode");
-        if (!string.IsNullOrEmpty(f.DestinationCode))   where.Add("d.destination_code = @DestinationCode");
-        if (!string.IsNullOrEmpty(f.OpsManager))        where.Add("d.ops_manager_initials = @OpsManager");
-        if (!string.IsNullOrEmpty(f.OpsExec))           where.Add("d.ops_exec_initials = @OpsExec");
-        if (!string.IsNullOrEmpty(f.Search))            where.Add("(d.series_name LIKE @Search OR d.destination_name LIKE @Search OR d.departure_id LIKE @Search)");
-
-        string whereClause = string.Join(" AND ", where);
+        string      table   = dialect.TableRef("presets", "tour_departures");
+        string      where   = string.Join(" AND ", DepartureWhereFilters(f, dialect));
 
         return $"""
                 SELECT DISTINCT
@@ -631,41 +690,46 @@ internal static class OpsGroupsDbHelper
                     d.series_code,
                     d.series_name
                 FROM {table} d
-                WHERE {whereClause}
+                WHERE {where}
                 ORDER BY d.branch_code, d.series_code
+                """;
+    }
+
+    internal static string FacetsTourGenericsSql(OpsGroupsDbSettings db, DepartureFilters f)
+    {
+        ISqlDialect dialect = Dialect(db.DbType);
+        string      table   = dialect.TableRef("presets", "tour_departures");
+        string      ts      = dialect.TableRef("presets", "tour_series");
+        string      tg      = dialect.TableRef("presets", "tour_generics");
+        string      falsy   = dialect.BooleanLiteral(false);
+
+        var whereClauses = DepartureWhereFilters(f, dialect);
+        whereClauses.Add($"g.frz_ind = {falsy}");
+        string where = string.Join(" AND ", whereClauses);
+
+        return $"""
+                SELECT DISTINCT g.code AS TourGenericCode, g.name AS TourGenericName
+                FROM   {table} d
+                JOIN   {ts}    s ON s.series_code = d.series_code AND s.tenant_id = d.tenant_id
+                JOIN   {tg}    g ON g.id           = s.tour_generic_id AND g.tenant_id = d.tenant_id
+                WHERE  {where}
+                ORDER BY g.name
                 """;
     }
 
     internal static string SeriesAggregateSql(OpsGroupsDbSettings db, DepartureFilters f)
     {
         ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_departures");
-        string      falsy   = dialect.BooleanLiteral(false);
-
-        var where = new List<string>
-        {
-            "d.tenant_id = @TenantId",
-            $"d.frz_ind  = {falsy}",
-        };
-
-        if (f.DateFrom.HasValue)     where.Add("d.departure_date >= @DateFrom");
-        if (f.DateTo.HasValue)       where.Add("d.departure_date <= @DateTo");
-        if (!string.IsNullOrEmpty(f.BranchCode))        where.Add("d.branch_code = @BranchCode");
-        if (!string.IsNullOrEmpty(f.SeriesCode))        where.Add("d.series_code = @SeriesCode");
-        if (!string.IsNullOrEmpty(f.DestinationCode))   where.Add("d.destination_code = @DestinationCode");
-        if (!string.IsNullOrEmpty(f.OpsManager))        where.Add("d.ops_manager_initials = @OpsManager");
-        if (!string.IsNullOrEmpty(f.OpsExec))           where.Add("d.ops_exec_initials = @OpsExec");
-        if (!string.IsNullOrEmpty(f.Search))            where.Add("(d.series_name LIKE @Search OR d.destination_name LIKE @Search OR d.departure_id LIKE @Search)");
-
-        string whereClause = string.Join(" AND ", where);
+        string      table   = dialect.TableRef("presets", "tour_departures");
+        string      where   = string.Join(" AND ", DepartureWhereFilters(f, dialect));
 
         return $"""
                 SELECT  d.series_code,
                         d.series_name,
-                        SUM(d.pax_count)     AS TotalPax,
+                        SUM(d.pax_count)      AS TotalPax,
                         COUNT(d.departure_id) AS TotalDepartures
                 FROM    {table} d
-                WHERE   {whereClause}
+                WHERE   {where}
                 GROUP BY d.series_code, d.series_name
                 ORDER BY d.series_code
                 """;
@@ -673,33 +737,17 @@ internal static class OpsGroupsDbHelper
 
     internal static string HeatmapDatesSql(OpsGroupsDbSettings db, DepartureFilters f)
     {
-        ISqlDialect dialect = Dialect(db.DbType);
-        string      table   = dialect.TableRef("opsgroups", "grouptour_departures");
-        string      falsy   = dialect.BooleanLiteral(false);
-        string      paging  = dialect.OffsetFetchClause(0, 28);
-
-        var where = new List<string>
-        {
-            "d.tenant_id = @TenantId",
-            $"d.frz_ind  = {falsy}",
-        };
-
-        if (f.DateFrom.HasValue)     where.Add("d.departure_date >= @DateFrom");
-        if (f.DateTo.HasValue)       where.Add("d.departure_date <= @DateTo");
-        if (!string.IsNullOrEmpty(f.BranchCode))        where.Add("d.branch_code = @BranchCode");
-        if (!string.IsNullOrEmpty(f.SeriesCode))        where.Add("d.series_code = @SeriesCode");
-        if (!string.IsNullOrEmpty(f.DestinationCode))   where.Add("d.destination_code = @DestinationCode");
-        if (!string.IsNullOrEmpty(f.OpsManager))        where.Add("d.ops_manager_initials = @OpsManager");
-        if (!string.IsNullOrEmpty(f.OpsExec))           where.Add("d.ops_exec_initials = @OpsExec");
-
-        if (f.WindowStart.HasValue) where.Add("d.departure_date >= @WindowStart");
-
-        string whereClause = string.Join(" AND ", where);
+        ISqlDialect dialect      = Dialect(db.DbType);
+        string      table        = dialect.TableRef("presets", "tour_departures");
+        string      paging       = dialect.OffsetFetchClause(0, 28);
+        var         whereClauses = DepartureWhereFilters(f, dialect);
+        if (f.WindowStart.HasValue) whereClauses.Add("d.departure_date >= @WindowStart");
+        string where = string.Join(" AND ", whereClauses);
 
         return $"""
                 SELECT DISTINCT d.departure_date
                 FROM    {table} d
-                WHERE   {whereClause}
+                WHERE   {where}
                 ORDER BY d.departure_date
                 {paging}
                 """;
@@ -712,7 +760,7 @@ internal static class OpsGroupsDbHelper
     internal static string TaskTemplatesForTenantSql(DbType dbType)
     {
         ISqlDialect dialect = Dialect(dbType);
-        string      table   = dialect.TableRef("presets", "group_task_templates");
+        string      table   = dialect.TableRef("presets", "group_tasks");
         string      falsy   = dialect.BooleanLiteral(false);
 
         return $"""
@@ -730,10 +778,9 @@ internal static class OpsGroupsDbHelper
     // Helpers
     // -------------------------------------------------------------------------
 
-    // TODO: fill in logic for each branch using the business rules values.
     // readinessMethod: "required_only" → Completed Required / Total Required
-    //                  "all_tasks"     → Completed All / Total All (excl. N/A unless includeNaInReadiness)
-    // includeNaInReadiness: when true, count "not_applicable" tasks as complete in both modes.
+    //                  "all_tasks"     → Completed All / Total All
+    // includeNaInReadiness: when true, "not_applicable" tasks count as complete in both modes.
     internal static int ComputeReadinessPct(
         IEnumerable<GroupTaskRow> tasks,
         string readinessMethod      = "required_only",
@@ -742,21 +789,22 @@ internal static class OpsGroupsDbHelper
         var list = tasks.ToList();
         if (list.Count == 0) return 0;
 
-        // TODO: implement required_only branch
-        // var required = list.Where(t => t.Required).ToList();
-        // if (required.Count == 0) return 0;
-        // int done = required.Count(t => t.Status == "complete" || (includeNaInReadiness && t.Status == "not_applicable"));
-        // return (int)Math.Round(done / (double)required.Count * 100, MidpointRounding.AwayFromZero);
+        bool IsDone(GroupTaskRow t) =>
+            t.Status == "complete" || (includeNaInReadiness && t.Status == "not_applicable");
 
-        // TODO: implement all_tasks branch
-        // var eligible = list.Where(t => includeNaInReadiness || t.Status != "not_applicable").ToList();
-        // if (eligible.Count == 0) return 0;
-        // int done = eligible.Count(t => t.Status == "complete" || (includeNaInReadiness && t.Status == "not_applicable"));
-        // return (int)Math.Round(done / (double)eligible.Count * 100, MidpointRounding.AwayFromZero);
+        if (readinessMethod == "required_only")
+        {
+            var required = list.Where(t => t.Required).ToList();
+            if (required.Count == 0) return 100; // no required tasks → fully ready
+            int done = required.Count(IsDone);
+            return (int)Math.Round(done / (double)required.Count * 100, MidpointRounding.AwayFromZero);
+        }
 
-        // Placeholder — remove once branches above are uncommented and correct.
-        int doneFallback = list.Count(t => t.Status is "complete" or "not_applicable");
-        return (int)Math.Round(doneFallback / (double)list.Count * 100, MidpointRounding.AwayFromZero);
+        // all_tasks: exclude not_applicable from denominator unless includeNaInReadiness
+        var eligible = list.Where(t => includeNaInReadiness || t.Status != "not_applicable").ToList();
+        if (eligible.Count == 0) return 100;
+        int doneAll = eligible.Count(IsDone);
+        return (int)Math.Round(doneAll / (double)eligible.Count * 100, MidpointRounding.AwayFromZero);
     }
 
     internal static string ComputeRiskLevel(int readinessPct)
@@ -788,7 +836,8 @@ internal sealed record DepartureFilters(
     string?    OpsManager,
     string?    OpsExec,
     string?    Search,
-    DateOnly?  WindowStart = null);
+    DateOnly?  WindowStart      = null,
+    string[]?  BranchCodeFilter = null);
 
 // -------------------------------------------------------------------------
 // Shared row records
@@ -824,6 +873,7 @@ internal sealed record GroupTaskRow(
     string?        Notes,
     string         Source,
     bool           Required,
+    int            LockVer,
     DateTimeOffset UpdatedOn);
 
 internal sealed record BusinessRulesRow(
@@ -843,13 +893,44 @@ internal sealed record BusinessRulesRow(
     DateTimeOffset UpdatedAt,
     string         UpdatedBy);
 
-internal sealed record SlaRuleRow(
+// -------------------------------------------------------------------------
+// SLA row records
+// -------------------------------------------------------------------------
+internal sealed record SlaTaskRow(
     Guid           Id,
-    string         Level,
-    string         ScopeKey,
-    string?        TourCode,
-    string         GroupTaskCode,
-    string         ReferenceDate,
-    int?           GroupTaskSlaOffsetDays,
-    string?        Version,
+    string         TenantId,
+    string         ScopeType,
+    Guid           ScopeId,
+    string         EnqEventCode,
+    string         TaskCode,
+    string         Kind,
+    int?           OffsetDays,
+    string         UpdatedBy,
     DateTimeOffset UpdatedOn);
+
+internal sealed record SlaAuditRow(
+    Guid           Id,
+    string         ScopeType,
+    Guid           ScopeId,
+    string         EnqEventCode,
+    string         TaskCode,
+    string?        KindOld,
+    int?           OffsetDaysOld,
+    string?        KindNew,
+    int?           OffsetDaysNew,
+    string         ChangedBy,
+    DateTimeOffset ChangedOn);
+
+internal sealed record EnquiryEventRow(string Code, string Description, int SortOrder);
+
+// Scope resolution rows
+internal sealed record ScopeResolutionGlob(Guid GlobId);
+internal sealed record ScopeResolutionTg(Guid TgId, Guid GlobId);
+internal sealed record ScopeResolutionTs(Guid TsId, Guid TgId, Guid GlobId);
+internal sealed record ScopeResolutionTd(Guid TdId, Guid TsId, Guid TgId, Guid GlobId);
+
+// SLA hierarchy tree rows
+internal sealed record TourGenericHierarchyRow(Guid TgId, string Code, string Name, Guid GlobId);
+internal sealed record GlobalInfoRow(Guid GlobId, string Name);
+internal sealed record TourSeriesHierarchyRow(Guid Id, string SeriesCode, string SeriesName);
+internal sealed record TourDepartureHierarchyRow(Guid Id, Guid TsId, string SeriesCode, DateOnly DepartureDate);

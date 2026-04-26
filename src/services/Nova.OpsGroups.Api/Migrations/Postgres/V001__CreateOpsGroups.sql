@@ -1,14 +1,21 @@
 -- ============================================================
--- Nova.OpsGroups.Api — opsgroups schema
+-- Nova.OpsGroups.Api — V001
 -- Postgres dialect
+-- All tables live in the presets schema (owned by Nova.Presets.Api).
+-- This migration creates only the OpsGroups-specific tables:
+--   tour_departures, grouptour_departure_group_tasks,
+--   grouptour_task_business_rules
+-- enquiry_events, tour_series, sla_task, sla_task_audit
+-- are in Nova.Presets.Api V006.
 -- ============================================================
 
-CREATE SCHEMA IF NOT EXISTS opsgroups;
+CREATE SCHEMA IF NOT EXISTS presets;
 
 -- ------------------------------------------------------------
--- grouptour_departures
+-- tour_departures
+-- Operational group-tour departure instances.
 -- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS opsgroups.grouptour_departures
+CREATE TABLE IF NOT EXISTS presets.tour_departures
 (
     id                    uuid          NOT NULL,
     tenant_id             varchar(10)   NOT NULL,
@@ -34,23 +41,24 @@ CREATE TABLE IF NOT EXISTS opsgroups.grouptour_departures
     updated_by            varchar(10)   NOT NULL,
     updated_on            timestamptz   NOT NULL,
     updated_at            varchar(50)   NOT NULL,
-    CONSTRAINT pk_grouptour_departures    PRIMARY KEY (id),
-    CONSTRAINT uq_grouptour_departures_id UNIQUE (tenant_id, departure_id)
+    CONSTRAINT pk_tour_departures    PRIMARY KEY (id),
+    CONSTRAINT uq_tour_departures_id UNIQUE (tenant_id, departure_id)
 );
 
-CREATE INDEX IF NOT EXISTS ix_grouptour_departures_date
-    ON opsgroups.grouptour_departures (tenant_id, departure_date);
+CREATE INDEX IF NOT EXISTS ix_tour_departures_date
+    ON presets.tour_departures (tenant_id, departure_date);
 
-CREATE INDEX IF NOT EXISTS ix_grouptour_departures_series
-    ON opsgroups.grouptour_departures (tenant_id, series_code);
+CREATE INDEX IF NOT EXISTS ix_tour_departures_series
+    ON presets.tour_departures (tenant_id, series_code);
 
-CREATE INDEX IF NOT EXISTS ix_grouptour_departures_branch
-    ON opsgroups.grouptour_departures (tenant_id, branch_code);
+CREATE INDEX IF NOT EXISTS ix_tour_departures_branch
+    ON presets.tour_departures (tenant_id, branch_code);
 
 -- ------------------------------------------------------------
 -- grouptour_departure_group_tasks
+-- Per-departure task instances generated from group_tasks templates.
 -- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS opsgroups.grouptour_departure_group_tasks
+CREATE TABLE IF NOT EXISTS presets.grouptour_departure_group_tasks
 (
     id              uuid          NOT NULL,
     tenant_id       varchar(10)   NOT NULL,
@@ -68,64 +76,18 @@ CREATE TABLE IF NOT EXISTS opsgroups.grouptour_departure_group_tasks
     updated_by      varchar(10)   NOT NULL,
     updated_on      timestamptz   NOT NULL,
     updated_at      varchar(50)   NOT NULL,
-    CONSTRAINT pk_grouptour_departure_group_tasks      PRIMARY KEY (id),
-    CONSTRAINT uq_grouptour_departure_group_tasks_id   UNIQUE (tenant_id, departure_id, group_task_id)
+    CONSTRAINT pk_grouptour_departure_group_tasks    PRIMARY KEY (id),
+    CONSTRAINT uq_grouptour_departure_group_tasks_id UNIQUE (tenant_id, departure_id, group_task_id)
 );
 
 CREATE INDEX IF NOT EXISTS ix_grouptour_departure_group_tasks_dep
-    ON opsgroups.grouptour_departure_group_tasks (tenant_id, departure_id);
-
--- ------------------------------------------------------------
--- grouptour_sla_rules
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS opsgroups.grouptour_sla_rules
-(
-    id                          uuid          NOT NULL,
-    tenant_id                   varchar(10)   NOT NULL,
-    level                       varchar(20)   NOT NULL,
-    scope_key                   varchar(100)  NOT NULL,
-    tour_code                   varchar(20)       NULL,
-    group_task_code             varchar(10)   NOT NULL,
-    reference_date              varchar(20)   NOT NULL,
-    group_task_sla_offset_days  int               NULL,
-    version                     varchar(50)       NULL,
-    created_by                  varchar(10)   NOT NULL,
-    created_on                  timestamptz   NOT NULL,
-    updated_by                  varchar(10)   NOT NULL,
-    updated_on                  timestamptz   NOT NULL,
-    updated_at                  varchar(50)   NOT NULL,
-    CONSTRAINT pk_grouptour_sla_rules PRIMARY KEY (id),
-    CONSTRAINT uq_grouptour_sla_rules UNIQUE (tenant_id, scope_key, group_task_code, reference_date)
-);
-
-CREATE INDEX IF NOT EXISTS ix_grouptour_sla_rules_level
-    ON opsgroups.grouptour_sla_rules (tenant_id, level, tour_code);
-
--- ------------------------------------------------------------
--- grouptour_sla_rule_audit
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS opsgroups.grouptour_sla_rule_audit
-(
-    id                uuid          NOT NULL,
-    tenant_id         varchar(10)   NOT NULL,
-    scope_key         varchar(100)  NOT NULL,
-    scope_label       varchar(200)  NOT NULL,
-    group_task_code   varchar(10)   NOT NULL,
-    reference_date    varchar(20)   NOT NULL,
-    old_value         int               NULL,
-    new_value         int               NULL,
-    changed_by_name   varchar(200)  NOT NULL,
-    changed_at        timestamptz   NOT NULL,
-    CONSTRAINT pk_grouptour_sla_rule_audit PRIMARY KEY (id)
-);
-
-CREATE INDEX IF NOT EXISTS ix_grouptour_sla_rule_audit_scope
-    ON opsgroups.grouptour_sla_rule_audit (tenant_id, scope_key, changed_at DESC);
+    ON presets.grouptour_departure_group_tasks (tenant_id, departure_id);
 
 -- ------------------------------------------------------------
 -- grouptour_task_business_rules
+-- Per-tenant/company/branch readiness and risk thresholds.
 -- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS opsgroups.grouptour_task_business_rules
+CREATE TABLE IF NOT EXISTS presets.grouptour_task_business_rules
 (
     tenant_id               varchar(10)   NOT NULL,
     company_code            varchar(10)   NOT NULL,

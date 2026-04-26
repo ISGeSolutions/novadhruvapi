@@ -61,7 +61,8 @@ public static class GetBySeqNoEndpoint
                 SendEMailToInd, SentMailInd, AlertToInd, SendSMSInd, SendSMSTo,
                 Travel_PNRNo, SeqNo_Charges, SeqNo_AcctNotes, Itinerary_No,
                 DoneInd, DoneBy, DoneOn,
-                ISNULL(FrzInd, 0) AS frz_ind, CreatedBy, CreatedOn, UpdatedBy, UpdatedOn, UpdatedAt
+                ISNULL(FrzInd, 0) AS frz_ind, CreatedBy, CreatedOn, UpdatedBy, UpdatedOn, UpdatedAt,
+                lock_ver
             FROM {todo}
             WHERE SeqNo = @SeqNo
             """;
